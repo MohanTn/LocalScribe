@@ -1,0 +1,61 @@
+name: Release
+
+# Linux and Windows only for now — macOS build/signing is out of scope.
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs on every push/PR: catches typecheck/build breakage and native-module
+  # (better-sqlite3) rebuild failures per OS before anyone cuts a release tag.
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+  # Runs only on version tags (v1.2.3): builds the whisper.cpp CLI for each OS,
+  # packages the installer, and publishes it to a GitHub Release via
+  # electron-builder's built-in GitHub provider (see electron-builder.yml).
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: win
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write # electron-builder creates/updates the GitHub Release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build whisper.cpp
+        shell: bash
+        run: ./scripts/setup-whisper.sh
+      - run: npm run release:${{ matrix.target }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
