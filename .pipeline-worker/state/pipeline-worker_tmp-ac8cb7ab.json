@@ -1,0 +1,7 @@
+{
+  "branch": "pipeline-worker/tmp-ac8cb7ab",
+  "targetBranch": "main",
+  "worktreePath": "/tmp/pipeline-worker-2CbAdA/worktree",
+  "attempt": 0,
+  "phase": "diff"
+}

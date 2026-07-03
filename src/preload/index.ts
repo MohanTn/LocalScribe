@@ -13,7 +13,9 @@ const RECEIVE_CHANNELS: ReceiveChannel[] = [
   'record:toggle',
   'ptt:down',
   'ptt:up',
-  'navigate'
+  'navigate',
+  'ollama:modelMissing',
+  'llm:pullProgress'
 ]
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
@@ -51,8 +53,11 @@ const api: LocalScribeApi = {
   pickFile: () => invoke('file:pick'),
   saveFile: (defaultName, content) => invoke('file:save', defaultName, content),
   polish: (text) => invoke('llm:polish', text),
+  checkOllamaModel: () => invoke('llm:checkOllamaModel'),
+  pullOllamaModel: (model) => invoke('llm:pullOllamaModel', model),
   paste: (text) => invoke('paste:text', text),
   engineInfo: () => invoke('engine:info'),
+  appVersion: () => invoke('app:version'),
   pathForFile: (file) => webUtils.getPathForFile(file),
   on: (channel, cb) => {
     if (!RECEIVE_CHANNELS.includes(channel)) {

@@ -3,8 +3,7 @@ name: Release
 # Linux and Windows only for now — macOS build/signing is out of scope.
 on:
   push:
-    branches: [main]
-    tags: ['v*.*.*']
+    branches: ['**']
   pull_request:
     branches: [main]
 
@@ -12,9 +11,10 @@ permissions:
   contents: read
 
 jobs:
-  # Runs on every push/PR: catches typecheck/build breakage and native-module
-  # (better-sqlite3) rebuild failures per OS before anyone cuts a release tag.
-  build:
+  # Runs on every push (any branch) and every PR into main: catches
+  # typecheck/build breakage and native-module (better-sqlite3) rebuild
+  # failures per OS before anything reaches main.
+  test:
     strategy:
       fail-fast: false
       matrix:
@@ -29,12 +29,40 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-  # Runs only on version tags (v1.2.3): builds the whisper.cpp CLI for each OS,
-  # packages the installer, and publishes it to a GitHub Release via
-  # electron-builder's built-in GitHub provider (see electron-builder.yml).
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+  # Runs only when main itself is updated (i.e. a PR just merged), never on
+  # a feature-branch push. Bumps the patch version, commits it back to main,
+  # and pushes the resulting tag — this is what build-and-release keys off.
+  bump-version:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the version bump commit + tag
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Bump patch version and tag
+        id: bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npm version patch -m "chore(release): %s [skip ci]"
+          tag="v$(node -p "require('./package.json').version")"
+          git push origin HEAD:main
+          git push origin "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  # Builds the whisper.cpp CLI for each OS, packages the installer, and
+  # publishes it to a GitHub Release via electron-builder's built-in GitHub
+  # provider (see electron-builder.yml), using the tag bump-version just cut.
+  build-and-release:
+    needs: bump-version
     strategy:
       fail-fast: false
       matrix:
@@ -48,6 +76,8 @@ jobs:
       contents: write # electron-builder creates/updates the GitHub Release
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump-version.outputs.tag }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22

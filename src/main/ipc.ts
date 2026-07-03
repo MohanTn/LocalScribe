@@ -1,10 +1,10 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { rmSync, writeFileSync } from 'fs'
 import { basename, join } from 'path'
 import { convertToWav16k } from './ffmpeg'
 import { addHistory, clearHistory, deleteHistory, searchHistory } from './history'
 import { applyHotkeys, type HotkeyHandlers } from './hotkeys'
-import { polish, warmupOllama } from './llm'
+import { getMissingOllamaModel, polish, pullOllamaModel, warmupOllama } from './llm'
 import { cancelDownload, deleteModel, downloadModel, listModels, modelPath } from './models'
 import { autoPaste } from './paste'
 import {
@@ -42,6 +42,16 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
     getWindow()?.webContents.send(channel, ...args)
   }
 
+  // Best-effort: lets the renderer offer a "Pull now" prompt instead of the
+  // user only finding out the model is missing when Polish fails. Pushed via
+  // an event (not just the on-mount query below) so a mid-session provider/
+  // model switch in Settings is caught too.
+  const notifyIfOllamaModelMissing = (llm: Settings['llm']): void => {
+    getMissingOllamaModel(llm).then((model) => {
+      if (model) send('ollama:modelMissing', model)
+    })
+  }
+
   // --- Models -------------------------------------------------------------
   handle('models:list', () => listModels())
   handle('models:download', async (id: string) => {
@@ -60,7 +70,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
   handle('settings:update', (patch: Partial<Settings>) => {
     const next = updateSettings(patch)
     applyHotkeys(next, hotkeyHandlers) // hotkey changes take effect immediately
-    if (patch.llm) warmupOllama(next.llm) // pick up a newly configured Ollama model right away
+    if (patch.llm) {
+      warmupOllama(next.llm) // pick up a newly configured Ollama model right away
+      notifyIfOllamaModelMissing(next.llm)
+    }
     return next
   })
 
@@ -74,6 +87,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
     backend: detectGpu(),
     binaryPath: whisperBinary()
   }))
+
+  // --- App version (shown in the UI corner + used by the --version CLI flag)
+  handle('app:version', () => app.getVersion())
 
   // --- File transcription ---------------------------------------------------
   handle('file:pick', async () => {
@@ -169,6 +185,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
 
   // --- Post-processing -------------------------------------------------------
   handle('llm:polish', (text: string) => polish(text, getSettings().llm))
+  handle('llm:checkOllamaModel', () => getMissingOllamaModel(getSettings().llm))
+  handle('llm:pullOllamaModel', (model: string) =>
+    pullOllamaModel(getSettings().llm, (fraction) => send('llm:pullProgress', { model, fraction }))
+  )
   handle('paste:text', (text: string) => autoPaste(text))
 
   // --- Export ---------------------------------------------------------------

@@ -78,19 +78,32 @@ export default function TranscribeView({ onToggleRecording }: Props): React.JSX.
     [result, text, notify]
   )
 
-  const doPolish = useCallback(async () => {
-    if (!text) return
-    setPolishing(true)
-    try {
-      const polished = await window.api.polish(text)
-      setText(polished)
-      notify(null)
-    } catch (err) {
-      notify(err instanceof Error ? err.message : String(err))
-    } finally {
-      setPolishing(false)
-    }
-  }, [text, notify])
+  const doPolish = useCallback(
+    async (source: string) => {
+      if (!source) return
+      setPolishing(true)
+      try {
+        const polished = await window.api.polish(source)
+        setText(polished)
+        notify(null)
+      } catch (err) {
+        notify(err instanceof Error ? err.message : String(err))
+      } finally {
+        setPolishing(false)
+      }
+    },
+    [notify]
+  )
+
+  // Auto-polish: fires once per new transcript, using result.text directly
+  // rather than the `text` state above so it doesn't race the effect that
+  // seeds `text` from the same result. Deliberately keyed only on `result`
+  // (not `settings`) — a settings tweak alone shouldn't re-trigger Polish.
+  useEffect(() => {
+    if (!result?.text || settings?.llm.provider === 'none' || !settings?.llm.autoPolish) return
+    void doPolish(result.text)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result])
 
   const clear = useCallback(() => setText(''), [])
 
@@ -190,7 +203,7 @@ export default function TranscribeView({ onToggleRecording }: Props): React.JSX.
           <button onClick={() => void paste()} disabled={!text}>
             Paste to app
           </button>
-          <button className="primary" onClick={() => void doPolish()} disabled={!text || polishing}>
+          <button className="primary" onClick={() => void doPolish(text)} disabled={!text || polishing}>
             {polishing ? 'Polishing…' : '✨ Polish'}
           </button>
         </div>

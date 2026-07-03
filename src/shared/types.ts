@@ -61,6 +61,8 @@ export interface LlmSettings {
   /** Empty string = provider default. */
   model: string
   promptMode: PolishPromptMode
+  /** Run Polish automatically on every new transcript instead of requiring the button. */
+  autoPolish: boolean
 }
 
 /** A user-defined correction applied to transcripts after whisper.cpp runs,

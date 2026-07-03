@@ -365,18 +365,34 @@ textarea {
   font-size: 11.5px;
 }
 
+.version-badge {
+  position: fixed;
+  right: 10px;
+  bottom: 6px;
+  font-size: 10.5px;
+  color: var(--muted);
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* ---- Notices ------------------------------------------------------------ */
 
+.notice-stack {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+}
 .notice {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
   max-width: 360px;
-  z-index: 1000;
   background: rgba(255, 92, 92, 0.09);
   border: 1px solid rgba(255, 92, 92, 0.4);
   border-radius: var(--radius);

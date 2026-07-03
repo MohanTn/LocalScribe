@@ -20,6 +20,8 @@ export type ReceiveChannel =
   | 'ptt:down'
   | 'ptt:up'
   | 'navigate'
+  | 'ollama:modelMissing'
+  | 'llm:pullProgress'
 
 export interface LocalScribeApi {
   models: {
@@ -49,8 +51,12 @@ export interface LocalScribeApi {
   pickFile: () => Promise<string | null>
   saveFile: (defaultName: string, content: string) => Promise<boolean>
   polish: (text: string) => Promise<string>
+  /** Name of the configured Ollama model if it isn't pulled yet, else null. */
+  checkOllamaModel: () => Promise<string | null>
+  pullOllamaModel: (model: string) => Promise<void>
   paste: (text: string) => Promise<PasteOutcome>
   engineInfo: () => Promise<{ backend: 'metal' | 'cuda' | 'cpu'; binaryPath: string | null }>
+  appVersion: () => Promise<string>
   /** Resolves a dragged File object to its filesystem path. */
   pathForFile: (file: File) => string
   /** Subscribes to a main->renderer event. Returns an unsubscribe function. */

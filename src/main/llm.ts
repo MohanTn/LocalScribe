@@ -123,3 +123,72 @@ export function warmupOllama(llm: LlmSettings): void {
     body: JSON.stringify({ model: llm.model || OLLAMA_DEFAULT_MODEL })
   }).catch(() => undefined)
 }
+
+// Ollama defaults the tag to "latest" when a model is referenced without one.
+function withTag(model: string): string {
+  return model.includes(':') ? model : `${model}:latest`
+}
+
+/**
+ * Checks whether the configured Ollama model is already pulled.
+ * Returns the model name if Ollama is reachable but the model is missing,
+ * or null if it's present or Ollama isn't reachable (that failure surfaces
+ * elsewhere, when Polish is actually used).
+ */
+export async function getMissingOllamaModel(llm: LlmSettings): Promise<string | null> {
+  if (llm.provider !== 'ollama') return null
+  const model = llm.model || OLLAMA_DEFAULT_MODEL
+  const base = (llm.endpoint || 'http://localhost:11434').replace(/\/$/, '')
+  try {
+    const res = await fetch(`${base}/api/tags`)
+    if (!res.ok) return null
+    const data = (await res.json()) as { models?: Array<{ name: string }> }
+    const installed = data.models?.map((m) => m.name) ?? []
+    return installed.includes(withTag(model)) ? null : model
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Streams `ollama pull` progress via Ollama's NDJSON /api/pull endpoint.
+ * onProgress receives a 0..1 fraction, or null once the pull completes.
+ */
+export async function pullOllamaModel(
+  llm: LlmSettings,
+  onProgress: (fraction: number | null) => void
+): Promise<void> {
+  const model = llm.model || OLLAMA_DEFAULT_MODEL
+  const base = (llm.endpoint || 'http://localhost:11434').replace(/\/$/, '')
+  let res: Response
+  try {
+    res = await fetch(`${base}/api/pull`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model, stream: true })
+    })
+  } catch {
+    throw new Error(`Could not reach Ollama at ${base}. Is it running?`)
+  }
+  if (!res.ok || !res.body) throw new Error(`Ollama pull failed (HTTP ${res.status}).`)
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  const consumeLine = (line: string): void => {
+    if (!line.trim()) return
+    const evt = JSON.parse(line) as { status?: string; completed?: number; total?: number; error?: string }
+    if (evt.error) throw new Error(evt.error)
+    onProgress(evt.total && evt.completed ? evt.completed / evt.total : null)
+  }
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) consumeLine(line)
+  }
+  consumeLine(buffer) // the stream may end without a trailing newline
+  onProgress(null)
+}
