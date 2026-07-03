@@ -1,0 +1,14 @@
+Package: local-scribe
+Version: 0.1.0
+License: MIT
+Vendor: LocalScribe Contributors <mohan.tn100@gmail.com>
+Architecture: amd64
+Maintainer: LocalScribe Contributors <mohan.tn100@gmail.com>
+Installed-Size: 438093
+Depends: libgtk-3-0, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0, libuuid1, libsecret-1-0
+Recommends: libappindicator3-1
+Section: default
+Priority: optional
+Homepage: https://github.com/MohanTn/LocalScribe#readme
+Description: Local speech-to-text with whisper.cpp
+  Local, private speech-to-text powered by whisper.cpp — transcribe files or dictate anywhere with global hotkeys.

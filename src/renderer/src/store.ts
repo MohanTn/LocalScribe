@@ -23,6 +23,13 @@ interface AppState {
   history: HistoryEntry[]
   /** Transient, user-facing notice (errors, paste fallbacks). */
   notice: string | null
+  /** App version shown in the UI corner; null until fetched from main. */
+  version: string | null
+  /** Configured Ollama model name if it isn't pulled yet, else null. */
+  ollamaMissingModel: string | null
+  ollamaPulling: boolean
+  /** 0..1, or null while Ollama hasn't reported a size yet. */
+  ollamaPullFraction: number | null
 
   setStatus: (s: AppStatus) => void
   setView: (v: View) => void
@@ -35,6 +42,10 @@ interface AppState {
   setLevel: (l: number) => void
   setHistory: (h: HistoryEntry[]) => void
   notify: (message: string | null) => void
+  setVersion: (v: string) => void
+  setOllamaMissingModel: (model: string | null) => void
+  setOllamaPulling: (pulling: boolean) => void
+  setOllamaPullFraction: (fraction: number | null) => void
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -48,6 +59,10 @@ export const useStore = create<AppState>((set) => ({
   level: 0,
   history: [],
   notice: null,
+  version: null,
+  ollamaMissingModel: null,
+  ollamaPulling: false,
+  ollamaPullFraction: null,
 
   setStatus: (status) => set({ status }),
   setView: (view) => set({ view }),
@@ -66,5 +81,9 @@ export const useStore = create<AppState>((set) => ({
   setRecording: (recording) => set({ recording }),
   setLevel: (level) => set({ level }),
   setHistory: (history) => set({ history }),
-  notify: (notice) => set({ notice })
+  notify: (notice) => set({ notice }),
+  setVersion: (version) => set({ version }),
+  setOllamaMissingModel: (ollamaMissingModel) => set({ ollamaMissingModel }),
+  setOllamaPulling: (ollamaPulling) => set({ ollamaPulling }),
+  setOllamaPullFraction: (ollamaPullFraction) => set({ ollamaPullFraction })
 }))

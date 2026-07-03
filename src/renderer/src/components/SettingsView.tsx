@@ -328,6 +328,16 @@ export default function SettingsView(): React.JSX.Element {
             </select>
           </div>
         )}
+        {settings.llm.provider !== 'none' && (
+          <label className="field checkbox">
+            <input
+              type="checkbox"
+              checked={settings.llm.autoPolish}
+              onChange={(e) => void update({ llm: { ...settings.llm, autoPolish: e.target.checked } })}
+            />
+            Automatically polish every new transcript
+          </label>
+        )}
       </section>
     </div>
   )

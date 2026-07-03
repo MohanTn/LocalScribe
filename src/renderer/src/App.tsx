@@ -19,6 +19,10 @@ const INIT_NOTICE = 'App is still initializing — please wait a moment.'
 export default function App(): React.JSX.Element {
   const view = useStore((s) => s.view)
   const notice = useStore((s) => s.notice)
+  const version = useStore((s) => s.version)
+  const ollamaMissingModel = useStore((s) => s.ollamaMissingModel)
+  const ollamaPulling = useStore((s) => s.ollamaPulling)
+  const ollamaPullFraction = useStore((s) => s.ollamaPullFraction)
   const recorderRef = useRef(new MicRecorder())
   const busyRef = useRef(false) // guards start/stop races
   const viaHotkeyRef = useRef(false)
@@ -94,6 +98,23 @@ export default function App(): React.JSX.Element {
     [startRecording, stopRecording]
   )
 
+  const pullOllamaModel = useCallback(async (model: string) => {
+    const s = useStore.getState()
+    s.setOllamaPulling(true)
+    s.setOllamaPullFraction(null)
+    try {
+      await window.api.pullOllamaModel(model)
+      const done = useStore.getState()
+      done.setOllamaMissingModel(null)
+      done.setOllamaPulling(false)
+      done.setOllamaPullFraction(null)
+    } catch (err) {
+      const failed = useStore.getState()
+      failed.setOllamaPulling(false)
+      failed.notify(err instanceof Error ? err.message : String(err))
+    }
+  }, [])
+
   useEffect(() => {
     // The preload bridge (`window.api`) is exposed by the Electron preload
     // script *before* renderer JS runs, but during HMR / dev restarts it can
@@ -135,6 +156,10 @@ export default function App(): React.JSX.Element {
         console.error('[LocalScribe] models:list failed:', err)
         s.notify(err instanceof Error ? err.message : String(err))
       })
+      // Best-effort: the version badge just stays blank if this fails.
+      void window.api.appVersion().then(s.setVersion).catch(() => undefined)
+      // Best-effort: no Ollama/model configured is a normal, silent no-op here.
+      void window.api.checkOllamaModel().then(s.setOllamaMissingModel).catch(() => undefined)
 
       unsubFns = [
         window.api.on('status', (status) => useStore.getState().setStatus(status as AppStatus)),
@@ -146,7 +171,12 @@ export default function App(): React.JSX.Element {
         window.api.on('record:toggle', () => toggleRecording(true)),
         window.api.on('ptt:down', () => void startRecording(true)),
         window.api.on('ptt:up', () => void stopRecording()),
-        window.api.on('navigate', (v) => useStore.getState().setView(v as View))
+        window.api.on('navigate', (v) => useStore.getState().setView(v as View)),
+        window.api.on('ollama:modelMissing', (model) => useStore.getState().setOllamaMissingModel(model as string)),
+        window.api.on('llm:pullProgress', (p) => {
+          const { fraction } = p as { model: string; fraction: number | null }
+          useStore.getState().setOllamaPullFraction(fraction)
+        })
       ]
     }
 
@@ -163,18 +193,42 @@ export default function App(): React.JSX.Element {
     <div className="app">
       <Sidebar />
       <main className="main">
-        {notice && (
-          <div className="notice" role="alert">
-            <span>{notice}</span>
-            <button className="notice-close" onClick={() => useStore.getState().notify(null)}>
-              ✕
-            </button>
-          </div>
-        )}
+        <div className="notice-stack">
+          {notice && (
+            <div className="notice" role="alert">
+              <span>{notice}</span>
+              <button className="notice-close" onClick={() => useStore.getState().notify(null)}>
+                ✕
+              </button>
+            </div>
+          )}
+          {ollamaMissingModel && (
+            <div className="notice" role="alert">
+              {ollamaPulling ? (
+                <>
+                  <span>Pulling {ollamaMissingModel}…</span>
+                  <progress value={ollamaPullFraction ?? undefined} max={1} />
+                </>
+              ) : (
+                <>
+                  <span>Ollama model &quot;{ollamaMissingModel}&quot; isn&apos;t downloaded.</span>
+                  <button onClick={() => void pullOllamaModel(ollamaMissingModel)}>Pull now</button>
+                  <button
+                    className="notice-close"
+                    onClick={() => useStore.getState().setOllamaMissingModel(null)}
+                  >
+                    ✕
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
         {view === 'transcribe' && <TranscribeView onToggleRecording={() => toggleRecording(false)} />}
         {view === 'history' && <HistoryView />}
         {view === 'settings' && <SettingsView />}
       </main>
+      {version && <span className="version-badge">v{version}</span>}
     </div>
   )
 }

@@ -8,6 +8,13 @@ import { getSettings } from './settings'
 import { onStatus } from './status'
 import { createTray } from './tray'
 
+// `LocalScribe --version` / `-v`: print and exit before anything else spins up
+// (single-instance lock, window, tray) so it works even with another instance running.
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log(app.getVersion())
+  app.exit(0)
+}
+
 let mainWindow: BrowserWindow | null = null
 let quitting = false
 
@@ -30,6 +37,10 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#101216', // matches the theme; avoids white flash
+    // electron-builder.yml's `icon:` only brands the *packaged* executable/
+    // installer — an unpackaged `npm run dev` run has no custom icon unless
+    // BrowserWindow is told explicitly (Linux/Windows taskbar; no-op on mac).
+    icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true, // renderer never touches Node directly

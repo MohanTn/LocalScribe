@@ -14,7 +14,14 @@ export const defaultSettings: Settings = {
   hotkeyPtt: '',
   micDeviceId: '',
   forceCpu: false,
-  llm: { provider: 'none', apiKey: '', endpoint: 'http://localhost:11434', model: '', promptMode: 'default' },
+  llm: {
+    provider: 'none',
+    apiKey: '',
+    endpoint: 'http://localhost:11434',
+    model: '',
+    promptMode: 'default',
+    autoPolish: false
+  },
   vocabulary: []
 }
 
