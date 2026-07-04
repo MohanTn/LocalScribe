@@ -43,31 +43,53 @@ export async function autoPaste(text: string): Promise<PasteOutcome> {
     return { copied: true, pasted: ok, reason: ok ? undefined : 'Could not simulate Ctrl+V. Text is on your clipboard.' }
   }
 
-  // Linux: xdotool (X11) or ydotool (Wayland) if present. On a Wayland
-  // session xdotool has to inject input through XWayland's XTEST bridge,
-  // which asks the compositor's Remote Desktop portal for permission on
-  // *every* invocation — a fresh xdotool process each time has no identity
+  // Linux: xdotool (X11) or ydotool (Wayland), whichever is present. On a
+  // Wayland session xdotool has to inject input through XWayland's XTEST
+  // bridge, which asks the compositor's Remote Desktop portal for permission
+  // on *every* invocation — a fresh xdotool process each time has no identity
   // for the compositor to remember consent for, so it re-prompts on every
   // single paste. ydotool writes to the kernel uinput device directly and
-  // needs no portal, so prefer it on Wayland whenever it's installed.
+  // needs no portal, so it's preferred on Wayland — but ydotool only works
+  // if its ydotoold daemon is running and can reach /dev/uinput, which isn't
+  // guaranteed just because the binary is installed. So we don't just pick a
+  // tool by availability: we try the preferred one and, if the *command
+  // itself* fails, fall back to the other before giving up.
   const wayland = process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY)
-  const hasYdotool = (): boolean => spawnSync('which', ['ydotool']).status === 0
+  const hasYdotool = spawnSync('which', ['ydotool']).status === 0
+  const hasXdotool = spawnSync('which', ['xdotool']).status === 0
   // ydotool key codes: 29=LeftCtrl, 47=V
   const runYdotool = (): Promise<boolean> => run('ydotool', ['key', '29:1', '47:1', '47:0', '29:0'])
+  const runXdotool = (): Promise<boolean> => run('xdotool', ['key', '--clearmodifiers', 'ctrl+v'])
 
-  if (wayland && hasYdotool()) {
-    return { copied: true, pasted: await runYdotool() }
+  const candidates = wayland
+    ? [
+        { available: hasYdotool, run: runYdotool },
+        { available: hasXdotool, run: runXdotool }
+      ]
+    : [
+        { available: hasXdotool, run: runXdotool },
+        { available: hasYdotool, run: runYdotool }
+      ]
+
+  let attempted = false
+  for (const candidate of candidates) {
+    if (!candidate.available) continue
+    attempted = true
+    if (await candidate.run()) return { copied: true, pasted: true }
   }
-  if (spawnSync('which', ['xdotool']).status === 0) {
-    const ok = await run('xdotool', ['key', '--clearmodifiers', 'ctrl+v'])
-    return { copied: true, pasted: ok }
-  }
-  if (hasYdotool()) {
-    return { copied: true, pasted: await runYdotool() }
+
+  if (!attempted) {
+    return {
+      copied: true,
+      pasted: false,
+      reason: 'Install xdotool (X11) or ydotool (Wayland) to enable auto-paste. Text is on your clipboard — press Ctrl+V.'
+    }
   }
   return {
     copied: true,
     pasted: false,
-    reason: 'Install xdotool (X11) or ydotool (Wayland) to enable auto-paste. Text is on your clipboard — press Ctrl+V.'
+    reason: wayland
+      ? 'Could not simulate Ctrl+V. If using ydotool, make sure the ydotoold daemon is running and your user can access /dev/uinput. Text is on your clipboard — press Ctrl+V.'
+      : 'Could not simulate Ctrl+V. Text is on your clipboard — press Ctrl+V.'
   }
 }
