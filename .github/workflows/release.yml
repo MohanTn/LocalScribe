@@ -28,6 +28,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - run: npm test
 
   # Runs only when main itself is updated (i.e. a PR just merged), never on
   # a feature-branch push. Bumps the patch version, commits it back to main,

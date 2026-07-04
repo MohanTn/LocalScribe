@@ -134,6 +134,8 @@ To use a custom `whisper-cli`, point `WHISPER_CPP_BIN` at it. The app's binary l
 
 If Accessibility is denied on macOS, paste falls back to a visible warning — re-grant it from System Settings.
 
+On Linux, LocalScribe prefers `ydotool` on Wayland (no per-paste permission prompt) and `xdotool` on X11, but automatically falls back to whichever tool actually works if the preferred one fails. A common ydotool failure mode: the `ydotoold` daemon isn't running, or your user lacks access to `/dev/uinput` (add yourself to the `input` group, or run `ydotoold` as a service that has that access). If both tools fail or neither is installed, the transcript still lands on your clipboard and LocalScribe tells you to paste manually with Ctrl+V.
+
 ## Push-to-talk (optional native hook)
 
 Electron's `globalShortcut` cannot observe key-*release*, which true hold-to-talk needs. Without this hook the PTT shortcut acts as a second toggle key.
