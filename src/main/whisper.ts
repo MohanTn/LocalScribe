@@ -82,6 +82,8 @@ export function detectGpu(): GpuBackend {
 export interface TranscribeOptions {
   language?: string
   forceCpu?: boolean
+  /** Biases decoding toward these terms (see vocabulary.ts's buildInitialPrompt). */
+  initialPrompt?: string
 }
 
 export interface WhisperOutput {
@@ -135,6 +137,11 @@ export async function transcribeWav(
     args.push('-ng')
   } else if (backend === 'cuda' || backend === 'metal') {
     args.push('-fa') // flash attention; not reliably supported on the Vulkan backend
+  }
+  // NOTE: whisper.cpp's `-p` is short for `--processors`, not prompt — the
+  // initial prompt only has a long-form flag.
+  if (opts.initialPrompt) {
+    args.push('--prompt', opts.initialPrompt)
   }
 
   await new Promise<void>((resolve, reject) => {

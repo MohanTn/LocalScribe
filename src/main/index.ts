@@ -7,6 +7,7 @@ import { warmupOllama } from './llm'
 import { getSettings } from './settings'
 import { onStatus } from './status'
 import { createTray } from './tray'
+import { checkForUpdates, initUpdater } from './updater'
 
 // `LocalScribe --version` / `-v`: print and exit before anything else spins up
 // (single-instance lock, window, tray) so it works even with another instance running.
@@ -99,6 +100,11 @@ if (!app.requestSingleInstanceLock()) {
 
     // Keep the renderer's status dot in sync from a single source of truth.
     onStatus((s) => mainWindow?.webContents.send('status', s))
+
+    initUpdater((s) => mainWindow?.webContents.send('update:status', s))
+    // Best-effort: a failed startup check just leaves the Settings page's
+    // manual "Check for updates" button as the way to retry.
+    if (getSettings().autoUpdateCheck) void checkForUpdates().catch(() => undefined)
 
     app.on('activate', () => {
       // macOS dock click with the window hidden.

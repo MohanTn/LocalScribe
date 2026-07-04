@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { listMicrophones } from '../lib/recorder'
 import { useStore } from '../store'
-import type { Settings, VocabularyEntry } from '../../../shared/api'
+import type { Settings, UpdateStatus, VocabularyEntry } from '../../../shared/api'
 
 // ---- Hotkey capture ---------------------------------------------------------
 
@@ -58,14 +58,32 @@ function HotkeyInput(props: {
 
 // ---- Settings page ------------------------------------------------------------
 
+function updateStatusText(status: UpdateStatus): string | null {
+  switch (status.state) {
+    case 'not-available':
+      return "You're up to date."
+    case 'downloading':
+      return `Downloading update${status.version ? ` v${status.version}` : ''}…`
+    case 'downloaded':
+      return `Update v${status.version} ready — restart to install.`
+    case 'error':
+      return status.message ?? 'Update check failed.'
+    default:
+      return null
+  }
+}
+
 export default function SettingsView(): React.JSX.Element {
   const settings = useStore((s) => s.settings)
   const models = useStore((s) => s.models)
+  const version = useStore((s) => s.version)
+  const updateStatus = useStore((s) => s.updateStatus)
   const setSettings = useStore((s) => s.setSettings)
   const setModels = useStore((s) => s.setModels)
   const notify = useStore((s) => s.notify)
   const [mics, setMics] = useState<Array<{ id: string; label: string }>>([])
   const [engine, setEngine] = useState<{ backend: string; binaryPath: string | null } | null>(null)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
 
   useEffect(() => {
     void listMicrophones().then(setMics).catch(() => setMics([]))
@@ -104,6 +122,17 @@ export default function SettingsView(): React.JSX.Element {
     [update]
   )
 
+  const checkForUpdates = useCallback(async () => {
+    setCheckingUpdate(true)
+    try {
+      await window.api.update.check()
+    } catch (err) {
+      notify(err instanceof Error ? err.message : String(err))
+    } finally {
+      setCheckingUpdate(false)
+    }
+  }, [notify])
+
   if (!settings) return <div className="view" />
 
   const downloaded = models.filter((m) => m.downloaded)
@@ -118,6 +147,36 @@ export default function SettingsView(): React.JSX.Element {
           </span>
         )}
       </header>
+
+      <section>
+        <h2>Updates</h2>
+        {version && <p className="muted">Current version: v{version}</p>}
+        {updateStatus.state === 'unsupported' ? (
+          <p className="muted">
+            Auto-update isn&apos;t available for this build (dev build, .deb package, or
+            macOS) — reinstall from the latest GitHub release instead.
+          </p>
+        ) : (
+          <>
+            <label className="field checkbox">
+              <input
+                type="checkbox"
+                checked={settings.autoUpdateCheck}
+                onChange={(e) => void update({ autoUpdateCheck: e.target.checked })}
+              />
+              Automatically check for updates on startup
+            </label>
+            <div className="field">
+              <button onClick={() => void checkForUpdates()} disabled={checkingUpdate}>
+                {checkingUpdate ? 'Checking…' : 'Check for updates'}
+              </button>
+              {!checkingUpdate && updateStatusText(updateStatus) && (
+                <span className="muted">{updateStatusText(updateStatus)}</span>
+              )}
+            </div>
+          </>
+        )}
+      </section>
 
       <section>
         <h2>Models</h2>
@@ -216,7 +275,9 @@ export default function SettingsView(): React.JSX.Element {
         <h2>Vocabulary</h2>
         <p className="muted">
           Correct words whisper consistently mishears or misspells, e.g. spoken "lama 3.1" replaced with
-          "Llama 3.1" in every transcript. Matching is case-insensitive and whole-word.
+          "Llama 3.1" in every transcript. Matching is case-insensitive and whole-word. The right-hand
+          terms are also fed back into whisper as a hint before transcribing, so it's more likely to get
+          them right in the first place.
         </p>
         <ul className="model-list">
           {settings.vocabulary.map((entry, i) => (

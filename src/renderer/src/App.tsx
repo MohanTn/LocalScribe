@@ -5,7 +5,7 @@ import HistoryView from './components/HistoryView'
 import SettingsView from './components/SettingsView'
 import { MicRecorder } from './lib/recorder'
 import { useStore, type View } from './store'
-import type { AppStatus } from '../../shared/api'
+import type { AppStatus, UpdateStatus } from '../../shared/api'
 
 // App owns the recording lifecycle (not TranscribeView) because recording can
 // be triggered from anywhere — global hotkey, tray menu, PTT — even while the
@@ -23,6 +23,7 @@ export default function App(): React.JSX.Element {
   const ollamaMissingModel = useStore((s) => s.ollamaMissingModel)
   const ollamaPulling = useStore((s) => s.ollamaPulling)
   const ollamaPullFraction = useStore((s) => s.ollamaPullFraction)
+  const updateStatus = useStore((s) => s.updateStatus)
   const recorderRef = useRef(new MicRecorder())
   const busyRef = useRef(false) // guards start/stop races
   const viaHotkeyRef = useRef(false)
@@ -98,6 +99,14 @@ export default function App(): React.JSX.Element {
     [startRecording, stopRecording]
   )
 
+  const installUpdate = useCallback(async () => {
+    try {
+      await window.api.update.install()
+    } catch (err) {
+      useStore.getState().notify(err instanceof Error ? err.message : String(err))
+    }
+  }, [])
+
   const pullOllamaModel = useCallback(async (model: string) => {
     const s = useStore.getState()
     s.setOllamaPulling(true)
@@ -160,6 +169,9 @@ export default function App(): React.JSX.Element {
       void window.api.appVersion().then(s.setVersion).catch(() => undefined)
       // Best-effort: no Ollama/model configured is a normal, silent no-op here.
       void window.api.checkOllamaModel().then(s.setOllamaMissingModel).catch(() => undefined)
+      // Pulls the current state instead of relying only on the 'update:status'
+      // push, which can fire (and even finish) before this listener attaches.
+      void window.api.update.status().then(s.setUpdateStatus).catch(() => undefined)
 
       unsubFns = [
         window.api.on('status', (status) => useStore.getState().setStatus(status as AppStatus)),
@@ -176,7 +188,8 @@ export default function App(): React.JSX.Element {
         window.api.on('llm:pullProgress', (p) => {
           const { fraction } = p as { model: string; fraction: number | null }
           useStore.getState().setOllamaPullFraction(fraction)
-        })
+        }),
+        window.api.on('update:status', (status) => useStore.getState().setUpdateStatus(status as UpdateStatus))
       ]
     }
 
@@ -221,6 +234,18 @@ export default function App(): React.JSX.Element {
                   </button>
                 </>
               )}
+            </div>
+          )}
+          {updateStatus.state === 'downloading' && (
+            <div className="notice" role="status">
+              <span>Downloading update{updateStatus.version ? ` v${updateStatus.version}` : ''}…</span>
+              <progress value={updateStatus.progress ?? undefined} max={1} />
+            </div>
+          )}
+          {updateStatus.state === 'downloaded' && (
+            <div className="notice" role="alert">
+              <span>Update v{updateStatus.version} ready to install.</span>
+              <button onClick={() => void installUpdate()}>Restart &amp; install</button>
             </div>
           )}
         </div>

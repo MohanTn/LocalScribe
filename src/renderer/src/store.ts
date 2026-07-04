@@ -4,7 +4,8 @@ import type {
   HistoryEntry,
   ModelInfo,
   Settings,
-  TranscriptionResult
+  TranscriptionResult,
+  UpdateStatus
 } from '../../shared/api'
 
 export type View = 'transcribe' | 'history' | 'settings'
@@ -30,6 +31,7 @@ interface AppState {
   ollamaPulling: boolean
   /** 0..1, or null while Ollama hasn't reported a size yet. */
   ollamaPullFraction: number | null
+  updateStatus: UpdateStatus
 
   setStatus: (s: AppStatus) => void
   setView: (v: View) => void
@@ -46,6 +48,7 @@ interface AppState {
   setOllamaMissingModel: (model: string | null) => void
   setOllamaPulling: (pulling: boolean) => void
   setOllamaPullFraction: (fraction: number | null) => void
+  setUpdateStatus: (status: UpdateStatus) => void
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -63,6 +66,7 @@ export const useStore = create<AppState>((set) => ({
   ollamaMissingModel: null,
   ollamaPulling: false,
   ollamaPullFraction: null,
+  updateStatus: { state: 'idle' },
 
   setStatus: (status) => set({ status }),
   setView: (view) => set({ view }),
@@ -85,5 +89,6 @@ export const useStore = create<AppState>((set) => ({
   setVersion: (version) => set({ version }),
   setOllamaMissingModel: (ollamaMissingModel) => set({ ollamaMissingModel }),
   setOllamaPulling: (ollamaPulling) => set({ ollamaPulling }),
-  setOllamaPullFraction: (ollamaPullFraction) => set({ ollamaPullFraction })
+  setOllamaPullFraction: (ollamaPullFraction) => set({ ollamaPullFraction }),
+  setUpdateStatus: (updateStatus) => set({ updateStatus })
 }))

@@ -14,6 +14,7 @@ export const defaultSettings: Settings = {
   hotkeyPtt: '',
   micDeviceId: '',
   forceCpu: false,
+  autoUpdateCheck: true,
   llm: {
     provider: 'none',
     apiKey: '',
