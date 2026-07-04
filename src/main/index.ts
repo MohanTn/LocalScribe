@@ -11,15 +11,20 @@ import { checkForUpdates, initUpdater } from './updater'
 
 // electron-builder's deb/AppImage targets can't ship a root-owned setuid
 // chrome-sandbox helper (the build itself runs unprivileged), so Chromium's
-// SUID sandbox check aborts with a FATAL error on every launch unless an
-// admin manually chown/chmods it post-install. LocalScribe's renderer only
-// ever loads its own bundled local HTML (never remote/attacker-controlled
-// content), so the OS-level renderer sandbox isn't protecting against an
-// active threat here; disabling it trades that narrow defense-in-depth for
-// an install that works out of the box. macOS/Windows use different sandbox
-// mechanisms and aren't affected by this.
+// SUID sandbox check aborts with a FATAL error unless an admin manually
+// chown/chmods it post-install (build/afterPack.js removes the file
+// entirely instead, which sidesteps that check the same way). LocalScribe's
+// renderer only ever loads its own bundled local HTML (never remote/
+// attacker-controlled content), so the OS-level sandbox isn't protecting
+// against an active threat here. macOS/Windows use different sandbox
+// mechanisms and aren't affected by any of this.
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('no-sandbox')
+  // Some hosts (e.g. small Docker containers, or ones where AppArmor's
+  // unprivileged-userns hardening on Ubuntu 24.04+ leaves Chromium's zygote
+  // namespace half-initialized) can't back shared memory with /dev/shm at
+  // all even with the sandbox off; this makes Chromium use /tmp instead.
+  app.commandLine.appendSwitch('disable-dev-shm-usage')
 }
 
 // `LocalScribe --version` / `-v`: print and exit before anything else spins up

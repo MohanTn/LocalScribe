@@ -4,6 +4,10 @@ productName: LocalScribe
 directories:
   buildResources: build
   output: release
+# Deletes the (unusably unprivileged) chrome-sandbox helper from Linux
+# builds; see build/afterPack.js for why this is necessary in addition to
+# the --no-sandbox switch in src/main/index.ts.
+afterPack: build/afterPack.js
 # 1024x1024 master; electron-builder derives .ico/.icns/per-size PNGs from it
 # at package time. Without this key, Windows/Linux silently fall back to
 # Electron's stock icon even if build/icon.png exists.
