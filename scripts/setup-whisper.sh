@@ -5,7 +5,9 @@
 #
 # Acceleration is a *compile-time* choice in whisper.cpp:
 #   macOS            -> Metal (on by default)
-#   Linux/Windows    -> CUDA when the CUDA toolkit is present, else CPU
+#   Linux/Windows    -> CUDA when the CUDA toolkit is present,
+#                       else Vulkan when the Vulkan SDK (glslc) is present,
+#                       else CPU
 # At runtime the app passes --no-gpu to fall back to CPU when needed.
 set -euo pipefail
 
@@ -30,8 +32,11 @@ case "$(uname -s)" in
     if command -v nvcc >/dev/null 2>&1; then
       echo "==> CUDA toolkit found, building with CUDA acceleration"
       CMAKE_FLAGS+=(-DGGML_CUDA=1)
+    elif command -v glslc >/dev/null 2>&1; then
+      echo "==> Vulkan SDK found, building with Vulkan acceleration"
+      CMAKE_FLAGS+=(-DGGML_VULKAN=1)
     else
-      echo "==> No CUDA toolkit found, building CPU-only"
+      echo "==> No CUDA or Vulkan SDK found, building CPU-only"
     fi
     ;;
 esac

@@ -53,15 +53,15 @@ export function whisperBinary(): string | null {
 // ---------------------------------------------------------------------------
 // GPU detection
 //
-// whisper.cpp decides its backend at *compile* time (CUDA / Metal / CPU) and,
-// unlike llama.cpp, its CLI has no -ngl layer-count flag — a GPU build
-// offloads the whole model by default. So "use CUDA/Metal, fall back to CPU"
+// whisper.cpp decides its backend at *compile* time (CUDA / Vulkan / Metal /
+// CPU) and, unlike llama.cpp, its CLI has no -ngl layer-count flag — a GPU
+// build offloads the whole model by default. So "use GPU, fall back to CPU"
 // means: build with GPU support when available (setup-whisper.sh does this),
 // and pass --no-gpu at runtime when no usable GPU is present or the user
 // forces CPU.
 // ---------------------------------------------------------------------------
 
-export type GpuBackend = 'metal' | 'cuda' | 'cpu'
+export type GpuBackend = 'metal' | 'cuda' | 'vulkan' | 'cpu'
 
 let detected: GpuBackend | null = null
 
@@ -69,9 +69,12 @@ export function detectGpu(): GpuBackend {
   if (detected) return detected
   if (process.platform === 'darwin') {
     detected = 'metal' // Metal is available on all supported macOS hardware
+  } else if (spawnSync('nvidia-smi', ['-L'], { windowsHide: true }).status === 0) {
+    detected = 'cuda'
+  } else if (spawnSync('vulkaninfo', ['--summary'], { windowsHide: true }).status === 0) {
+    detected = 'vulkan'
   } else {
-    const probe = spawnSync('nvidia-smi', ['-L'], { windowsHide: true })
-    detected = probe.status === 0 ? 'cuda' : 'cpu'
+    detected = 'cpu'
   }
   return detected
 }
@@ -115,7 +118,8 @@ export async function transcribeWav(
 
   const outBase = wavPath // whisper writes <outBase>.json
   const threads = Math.max(1, Math.min(8, cpus().length - 1))
-  const useGpu = !opts.forceCpu && detectGpu() !== 'cpu'
+  const backend = detectGpu()
+  const useGpu = !opts.forceCpu && backend !== 'cpu'
   const args = [
     '-m', modelPath,
     '-f', wavPath,
@@ -127,10 +131,10 @@ export async function transcribeWav(
     '-of', outBase,
     '-np'         // no runtime prints, keep stderr small
   ]
-  if (useGpu) {
-    args.push('-fa') // flash attention, GPU-only speedup
-  } else {
+  if (!useGpu) {
     args.push('-ng')
+  } else if (backend === 'cuda' || backend === 'metal') {
+    args.push('-fa') // flash attention; not reliably supported on the Vulkan backend
   }
 
   await new Promise<void>((resolve, reject) => {
