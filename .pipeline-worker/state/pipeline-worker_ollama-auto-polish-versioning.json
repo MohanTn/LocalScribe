@@ -1,0 +1,9 @@
+{
+  "branch": "pipeline-worker/ollama-auto-polish-versioning",
+  "targetBranch": "main",
+  "worktreePath": "/tmp/pipeline-worker-2CbAdA/worktree",
+  "attempt": 0,
+  "phase": "done",
+  "mrIid": 1,
+  "pipelineId": 28638468320
+}
