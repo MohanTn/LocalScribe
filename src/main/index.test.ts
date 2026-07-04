@@ -32,7 +32,7 @@ function setPlatform(platform: string): void {
   Object.defineProperty(process, 'platform', { value: platform, configurable: true })
 }
 
-describe('Linux sandbox switch', () => {
+describe('Linux sandbox switches', () => {
   const originalPlatform = process.platform
 
   beforeEach(() => {
@@ -44,10 +44,11 @@ describe('Linux sandbox switch', () => {
     setPlatform(originalPlatform)
   })
 
-  it('disables the Chromium sandbox on Linux', async () => {
+  it('disables the Chromium sandbox and /dev/shm usage on Linux', async () => {
     setPlatform('linux')
     await import('./index')
     expect(appendSwitchMock).toHaveBeenCalledWith('no-sandbox')
+    expect(appendSwitchMock).toHaveBeenCalledWith('disable-dev-shm-usage')
   })
 
   it('leaves the sandbox enabled on macOS', async () => {
