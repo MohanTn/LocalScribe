@@ -1,0 +1,23 @@
+{
+  "branch": "pipeline-worker/tmp-868d034e",
+  "targetBranch": "main",
+  "worktreePath": "/tmp/pipeline-worker-Vk3Tcj/worktree",
+  "attempt": 0,
+  "phase": "diff",
+  "startedAt": "2026-07-04T12:53:39.978Z",
+  "updatedAt": "2026-07-04T12:54:30.018Z",
+  "history": [
+    {
+      "at": "2026-07-04T12:53:39.978Z",
+      "phase": "diff",
+      "level": "info",
+      "message": "Created worktree at /tmp/pipeline-worker-Vk3Tcj/worktree (temp branch pipeline-worker/tmp-868d034e)"
+    },
+    {
+      "at": "2026-07-04T12:54:30.018Z",
+      "phase": "diff",
+      "level": "error",
+      "message": "Run failed: pipeline-worker: could not automatically resolve conflicts applying your diff — package-lock.json still have conflict markers. Resolve them manually and retry."
+    }
+  ]
+}
