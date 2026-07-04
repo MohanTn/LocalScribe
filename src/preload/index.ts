@@ -57,6 +57,7 @@ const api: LocalScribeApi = {
   checkOllamaModel: () => invoke('llm:checkOllamaModel'),
   pullOllamaModel: (model) => invoke('llm:pullOllamaModel', model),
   paste: (text) => invoke('paste:text', text),
+  copyText: (text) => invoke('clipboard:copy', text),
   engineInfo: () => invoke('engine:info'),
   appVersion: () => invoke('app:version'),
   update: {
