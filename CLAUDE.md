@@ -44,8 +44,8 @@ Every `ipcMain.handle` in `src/main/ipc.ts` is wrapped by a `handle()` helper th
 1. Renderer (`src/renderer/src/lib/recorder.ts`) captures mic audio via an `AudioContext` created at 16 kHz (so Chromium resamples in native code) and an `AudioWorklet` that converts Float32 frames to Int16 PCM.
 2. PCM chunks stream to main over `audio:chunk` (fire-and-forget IPC, ~10 msg/sec).
 3. Main (`src/main/recording.ts`) accumulates chunks in a buffer (so a backgrounded/GC'd renderer never loses audio) and:
-   - every 2.5 s, re-transcribes the last ≤20 s as a sliding window for **live partial captions** (best-effort; errors are swallowed — the final pass surfaces real failures),
-   - on stop, transcribes the full buffer for the **final result**.
+   - every 2.5 s, re-transcribes the last ≤10 s as a sliding window for **live partial captions** (best-effort; errors are swallowed — the final pass surfaces real failures). The window is deliberately short: it's only a live preview, so a smaller re-transcription finishes faster and frees the GPU sooner; the final pass restores full-recording context regardless,
+   - on stop, transcribes the full buffer for the **final result**. `stopRecording` first awaits any in-flight partial so the two whisper jobs don't overlap — on a small (e.g. 4 GB) GPU, two concurrent jobs each run ~1.8× slower from VRAM contention, felt directly as post-stop latency.
 4. `src/main/whisper.ts` spawns the whisper.cpp CLI **per job** (not a resident process) — this keeps idle memory near zero (well under the ~150 MB tray budget) and isolates native crashes from the app. It parses whisper's `-oj -ojf` JSON output and collapses whisper's sub-word tokens into whole words with timestamps (`tokensToWords`) for word-level SRT export.
 5. File transcription (`transcribe:file` in `ipc.ts`) instead normalizes the input through `src/main/ffmpeg.ts` (bundled `ffmpeg-static`, falls back to system `ffmpeg` on PATH) to 16 kHz mono PCM WAV before handing off to the same `transcribeWav`.
 
