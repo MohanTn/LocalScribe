@@ -54,6 +54,10 @@ GPU acceleration is a **compile-time** choice in whisper.cpp (Metal on macOS by 
 
 whisper.cpp / ffmpeg stderr is translated to actionable messages in `friendlyWhisperError()` (`whisper.ts`) and inline in `ffmpeg.ts`'s `close` handler — raw stack traces should never reach the UI. Follow this pattern for new failure modes rather than surfacing raw child-process output.
 
+### Linux sandbox
+
+`src/main/index.ts` disables Chromium's OS sandbox on Linux (`app.commandLine.appendSwitch('no-sandbox')`) before app ready. electron-builder's deb/AppImage targets can't ship a root-owned setuid `chrome-sandbox` helper, so without this the packaged app aborts with a FATAL `setuid_sandbox_host.cc` error on every launch unless an admin manually runs `chown root:root` + `chmod 4755` on it post-install. The renderer only ever loads bundled local HTML (never remote content), so this trades a narrow defense-in-depth layer for an install that works without manual intervention. macOS/Windows are unaffected (different sandbox mechanisms, no setuid helper involved).
+
 ### Hotkeys and push-to-talk
 
 `src/main/hotkeys.ts` uses Electron's `globalShortcut` for the toggle hotkey (press-only is fine there). True push-to-talk needs a key-*release* event, which `globalShortcut` can't provide, so PTT uses the optional native `uiohook-napi` dependency (loaded via `require`, guarded by try/catch) when installed; if it's absent, PTT silently degrades to a second toggle shortcut. Don't assume `uiohook-napi` is present — always feature-detect via `loadUiohook()`.
