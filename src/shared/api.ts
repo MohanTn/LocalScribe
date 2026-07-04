@@ -6,6 +6,7 @@ import type {
   Settings,
   StopOptions,
   TranscriptionResult,
+  UpdateStatus,
   VocabularyEntry
 } from './types'
 
@@ -22,6 +23,7 @@ export type ReceiveChannel =
   | 'navigate'
   | 'ollama:modelMissing'
   | 'llm:pullProgress'
+  | 'update:status'
 
 export interface LocalScribeApi {
   models: {
@@ -57,6 +59,15 @@ export interface LocalScribeApi {
   paste: (text: string) => Promise<PasteOutcome>
   engineInfo: () => Promise<{ backend: 'metal' | 'cuda' | 'vulkan' | 'cpu'; binaryPath: string | null }>
   appVersion: () => Promise<string>
+  update: {
+    /** Current status — pulled on mount since the push can fire before a
+     *  fresh window subscribes to it. */
+    status: () => Promise<UpdateStatus>
+    /** Manual "Check for updates" — works even if autoUpdateCheck is off. */
+    check: () => Promise<void>
+    /** Quits and installs an already-downloaded update. */
+    install: () => Promise<void>
+  }
   /** Resolves a dragged File object to its filesystem path. */
   pathForFile: (file: File) => string
   /** Subscribes to a main->renderer event. Returns an unsubscribe function. */
@@ -78,6 +89,7 @@ export type {
   Settings,
   StopOptions,
   TranscriptionResult,
+  UpdateStatus,
   VocabularyEntry
 }
 export type { Segment, Word } from './types'

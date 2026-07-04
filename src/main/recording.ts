@@ -4,7 +4,7 @@ import { join } from 'path'
 import { getSettings } from './settings'
 import { modelPath } from './models'
 import { transcribeWav } from './whisper'
-import { applyVocabulary } from './vocabulary'
+import { applyVocabulary, buildInitialPrompt } from './vocabulary'
 import type { TranscriptionResult } from '../shared/types'
 
 // The renderer captures the microphone (getUserMedia needs a renderer) and
@@ -115,7 +115,8 @@ async function runWhisperOnPcm(pcm: Buffer): Promise<{ text: string; segments: T
     writeFileSync(wav, pcmToWav(pcm))
     const out = await transcribeWav(wav, modelPath(settings.model), {
       language: settings.language,
-      forceCpu: settings.forceCpu
+      forceCpu: settings.forceCpu,
+      initialPrompt: buildInitialPrompt(settings.vocabulary)
     })
     return applyVocabulary(out, settings.vocabulary)
   } finally {

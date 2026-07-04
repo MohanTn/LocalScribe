@@ -87,8 +87,33 @@ export interface Settings {
   micDeviceId: string
   /** Force CPU even when a GPU is available. */
   forceCpu: boolean
+  /** Silently check for a new release on startup (see src/main/updater.ts). */
+  autoUpdateCheck: boolean
   llm: LlmSettings
   vocabulary: VocabularyEntry[]
+}
+
+/**
+ * 'unsupported' covers dev builds, .deb installs, and macOS (no published
+ * mac installer yet) — platforms/build types electron-updater can't self-update.
+ */
+export type UpdateState =
+  | 'idle'
+  | 'unsupported'
+  | 'checking'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+export interface UpdateStatus {
+  state: UpdateState
+  /** Release version; set for 'downloading' and 'downloaded'. */
+  version?: string
+  /** 0..1, only set during 'downloading'. */
+  progress?: number
+  /** User-facing explanation; only set for 'error'. */
+  message?: string
 }
 
 export interface PasteOutcome {

@@ -19,6 +19,29 @@ function replaceAll(text: string, entries: VocabularyEntry[]): string {
   return result
 }
 
+// whisper.cpp's own --help caps the initial prompt at roughly n_text_ctx/2
+// tokens (~a few hundred characters); this cap keeps the argv sane rather than
+// relying on whisper.cpp to silently truncate an arbitrarily long string.
+const MAX_PROMPT_CHARS = 400
+
+/**
+ * Builds whisper.cpp's `--prompt` argument from the corrected (`to`) side of
+ * the vocabulary list, so decoding is biased toward the right spelling instead
+ * of only correcting it after the fact (see applyVocabulary above, which still
+ * runs regardless — the prompt nudges probabilities, it doesn't guarantee
+ * exact output).
+ */
+export function buildInitialPrompt(entries: VocabularyEntry[]): string | undefined {
+  const terms = new Set(
+    entries
+      .filter((e) => e.from.trim() && e.to.trim())
+      .map((e) => e.to.trim())
+  )
+  if (terms.size === 0) return undefined
+  const prompt = [...terms].join(', ')
+  return prompt.length > MAX_PROMPT_CHARS ? prompt.slice(0, MAX_PROMPT_CHARS) : prompt
+}
+
 export function applyVocabulary<T extends { text: string; segments: Segment[] }>(
   out: T,
   entries: VocabularyEntry[]

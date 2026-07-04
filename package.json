@@ -30,6 +30,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
     "better-sqlite3": "^11.7.0",
+    "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.2.0"
   },
   "devDependencies": {

@@ -17,7 +17,8 @@ import {
 } from './recording'
 import { getSettings, updateSettings } from './settings'
 import { setStatus } from './status'
-import { applyVocabulary } from './vocabulary'
+import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
+import { applyVocabulary, buildInitialPrompt } from './vocabulary'
 import { detectGpu, transcribeWav, whisperBinary } from './whisper'
 import type { Settings, StopOptions, TranscriptionResult } from '../shared/types'
 
@@ -91,6 +92,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
   // --- App version (shown in the UI corner + used by the --version CLI flag)
   handle('app:version', () => app.getVersion())
 
+  // --- Updates ----------------------------------------------------------------
+  // 'update:getStatus' is a pull for the renderer's on-mount sync — the
+  // 'update:status' push can fire (and even finish) before a fresh window has
+  // subscribed to it.
+  handle('update:getStatus', () => getUpdateStatus())
+  handle('update:check', () => checkForUpdates())
+  handle('update:install', () => installUpdate())
+
   // --- File transcription ---------------------------------------------------
   handle('file:pick', async () => {
     const res = await dialog.showOpenDialog({
@@ -117,7 +126,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
       await convertToWav16k(filePath, wav)
       const raw = await transcribeWav(wav, modelPath(settings.model), {
         language: settings.language,
-        forceCpu: settings.forceCpu
+        forceCpu: settings.forceCpu,
+        initialPrompt: buildInitialPrompt(settings.vocabulary)
       })
       const out = applyVocabulary(raw, settings.vocabulary)
       const result: TranscriptionResult = {
