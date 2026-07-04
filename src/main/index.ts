@@ -9,6 +9,19 @@ import { onStatus } from './status'
 import { createTray } from './tray'
 import { checkForUpdates, initUpdater } from './updater'
 
+// electron-builder's deb/AppImage targets can't ship a root-owned setuid
+// chrome-sandbox helper (the build itself runs unprivileged), so Chromium's
+// SUID sandbox check aborts with a FATAL error on every launch unless an
+// admin manually chown/chmods it post-install. LocalScribe's renderer only
+// ever loads its own bundled local HTML (never remote/attacker-controlled
+// content), so the OS-level renderer sandbox isn't protecting against an
+// active threat here; disabling it trades that narrow defense-in-depth for
+// an install that works out of the box. macOS/Windows use different sandbox
+// mechanisms and aren't affected by this.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox')
+}
+
 // `LocalScribe --version` / `-v`: print and exit before anything else spins up
 // (single-instance lock, window, tray) so it works even with another instance running.
 if (process.argv.includes('--version') || process.argv.includes('-v')) {
