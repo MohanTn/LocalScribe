@@ -55,7 +55,7 @@ export interface LocalScribeApi {
   checkOllamaModel: () => Promise<string | null>
   pullOllamaModel: (model: string) => Promise<void>
   paste: (text: string) => Promise<PasteOutcome>
-  engineInfo: () => Promise<{ backend: 'metal' | 'cuda' | 'cpu'; binaryPath: string | null }>
+  engineInfo: () => Promise<{ backend: 'metal' | 'cuda' | 'vulkan' | 'cpu'; binaryPath: string | null }>
   appVersion: () => Promise<string>
   /** Resolves a dragged File object to its filesystem path. */
   pathForFile: (file: File) => string
