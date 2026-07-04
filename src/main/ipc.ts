@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron'
 import { rmSync, writeFileSync } from 'fs'
 import { basename, join } from 'path'
 import { convertToWav16k } from './ffmpeg'
@@ -200,6 +200,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
     pullOllamaModel(getSettings().llm, (fraction) => send('llm:pullProgress', { model, fraction }))
   )
   handle('paste:text', (text: string) => autoPaste(text))
+  // Electron's clipboard module, not the renderer's navigator.clipboard —
+  // the Async Clipboard API needs document focus/permission and fails
+  // silently on some Linux sessions; writing from main sidesteps both.
+  handle('clipboard:copy', (text: string) => clipboard.writeText(text))
 
   // --- Export ---------------------------------------------------------------
   handle('file:save', async (defaultName: string, content: string) => {

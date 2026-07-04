@@ -13,11 +13,10 @@ npm run dev              # electron-vite dev (hot reload)
 npm run typecheck        # tsc --noEmit for both main and web tsconfig projects
 npm run build             # typecheck + electron-vite build
 npm run start             # electron-vite preview (built app, no dev server)
+npm run test               # vitest run
 npm run dist               # package for current platform -> release/
 npm run dist:win|mac|linux # platform-specific packaging
 ```
-
-There is no test suite/runner configured in this repo.
 
 Before `npm run dev` will work, the whisper.cpp CLI must be built locally:
 

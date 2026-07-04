@@ -57,6 +57,8 @@ export interface LocalScribeApi {
   checkOllamaModel: () => Promise<string | null>
   pullOllamaModel: (model: string) => Promise<void>
   paste: (text: string) => Promise<PasteOutcome>
+  /** Writes to the OS clipboard via Electron's clipboard module (main process). */
+  copyText: (text: string) => Promise<void>
   engineInfo: () => Promise<{ backend: 'metal' | 'cuda' | 'vulkan' | 'cpu'; binaryPath: string | null }>
   appVersion: () => Promise<string>
   update: {
