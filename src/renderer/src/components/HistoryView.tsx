@@ -4,8 +4,16 @@ import { useStore } from '../store'
 export default function HistoryView(): React.JSX.Element {
   const history = useStore((s) => s.history)
   const setHistory = useStore((s) => s.setHistory)
+  const notify = useStore((s) => s.notify)
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<number | null>(null)
+
+  const copy = useCallback(
+    (text: string) => {
+      window.api.copyText(text).catch((err) => notify(err instanceof Error ? err.message : String(err)))
+    },
+    [notify]
+  )
 
   const refresh = useCallback(
     async (q: string) => {
@@ -69,7 +77,7 @@ export default function HistoryView(): React.JSX.Element {
                 <div className="history-detail">
                   <p className="history-full">{entry.text}</p>
                   <div className="action-group">
-                    <button onClick={() => void navigator.clipboard.writeText(entry.text)}>Copy</button>
+                    <button onClick={() => copy(entry.text)}>Copy</button>
                     <button className="danger" onClick={() => void remove(entry.id)}>
                       Delete
                     </button>

@@ -78,13 +78,19 @@ export default function TranscribeView({ onToggleRecording }: Props): React.JSX.
     [result, text, notify]
   )
 
+  // `refreshClipboard` is set only by the auto-polish effect below, so every
+  // automatic pass (hotkey dictation, dropped file, ...) leaves the clipboard
+  // holding the final polished text rather than the raw transcript auto-paste
+  // may have copied first. The manual Polish button leaves the clipboard
+  // alone — that's what the explicit Copy button is for.
   const doPolish = useCallback(
-    async (source: string) => {
+    async (source: string, refreshClipboard = false) => {
       if (!source) return
       setPolishing(true)
       try {
         const polished = await window.api.polish(source)
         setText(polished)
+        if (refreshClipboard) await window.api.copyText(polished)
         notify(null)
       } catch (err) {
         notify(err instanceof Error ? err.message : String(err))
@@ -101,15 +107,15 @@ export default function TranscribeView({ onToggleRecording }: Props): React.JSX.
   // (not `settings`) — a settings tweak alone shouldn't re-trigger Polish.
   useEffect(() => {
     if (!result?.text || settings?.llm.provider === 'none' || !settings?.llm.autoPolish) return
-    void doPolish(result.text)
+    void doPolish(result.text, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result])
 
   const clear = useCallback(() => setText(''), [])
 
   const copy = useCallback(() => {
-    void navigator.clipboard.writeText(text)
-  }, [text])
+    window.api.copyText(text).catch((err) => notify(err instanceof Error ? err.message : String(err)))
+  }, [text, notify])
 
   const paste = useCallback(async () => {
     const outcome = await window.api.paste(text)
