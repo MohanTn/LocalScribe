@@ -1,5 +1,6 @@
 import type {
   AppStatus,
+  BenchmarkResult,
   HistoryEntry,
   ModelInfo,
   PasteOutcome,
@@ -24,6 +25,7 @@ export type ReceiveChannel =
   | 'ollama:modelMissing'
   | 'llm:pullProgress'
   | 'update:status'
+  | 'models:benchmarkProgress'
 
 export interface LocalScribeApi {
   models: {
@@ -31,6 +33,8 @@ export interface LocalScribeApi {
     download: (id: string) => Promise<void>
     cancel: (id: string) => Promise<void>
     delete: (id: string) => Promise<void>
+    /** Transcribes a 30 s test clip with every downloaded model and returns timing stats. */
+    benchmark: () => Promise<BenchmarkResult[]>
   }
   settings: {
     get: () => Promise<Settings>
@@ -85,6 +89,7 @@ declare global {
 // Re-export so the renderer can import all types from one place.
 export type {
   AppStatus,
+  BenchmarkResult,
   HistoryEntry,
   ModelInfo,
   PasteOutcome,

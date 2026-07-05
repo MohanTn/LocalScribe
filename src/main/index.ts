@@ -4,10 +4,12 @@ import { initHistory } from './history'
 import { applyHotkeys, unregisterHotkeys, type HotkeyHandlers } from './hotkeys'
 import { registerIpc } from './ipc'
 import { warmupOllama } from './llm'
+import { modelPath } from './models'
 import { getSettings } from './settings'
 import { onStatus } from './status'
 import { createTray } from './tray'
 import { checkForUpdates, initUpdater } from './updater'
+import { ensureServer, stopServer } from './whisper-server'
 
 // electron-builder's deb/AppImage targets can't ship a root-owned setuid
 // chrome-sandbox helper (the build itself runs unprivileged), so Chromium's
@@ -70,8 +72,8 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => mainWindow?.show())
 
   // Closing the window minimizes to tray; the app (and its hotkeys) live on.
-  // Because whisper.cpp runs as a child process per job, the idle footprint is
-  // just Electron + a hidden window — comfortably inside the 150MB budget.
+  // The resident whisper-server keeps the model loaded (avoiding cold starts),
+  // trading higher idle RAM for instant dictation responsiveness.
   mainWindow.on('close', (e) => {
     if (!quitting) {
       e.preventDefault()
@@ -116,6 +118,13 @@ if (!app.requestSingleInstanceLock()) {
     applyHotkeys(getSettings(), hotkeyHandlers)
     warmupOllama(getSettings().llm) // best-effort: avoid a cold-start delay on the first Polish
 
+    // Start whisper-server so the model stays resident — avoids the per-job
+    // cold-start penalty (disk read + GPU alloc) on every partial/final transcription.
+    const s = getSettings()
+    ensureServer(modelPath(s.model), s.forceCpu).catch((err) =>
+      console.warn('whisper-server failed to start; falling back to whisper-cli:', err)
+    )
+
     // Keep the renderer's status dot in sync from a single source of truth.
     onStatus((s) => mainWindow?.webContents.send('status', s))
 
@@ -134,6 +143,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     quitting = true
     unregisterHotkeys()
+    stopServer()
   })
 
   // Tray app: do NOT quit when the window closes, on any platform.

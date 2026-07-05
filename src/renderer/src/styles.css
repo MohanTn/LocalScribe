@@ -557,6 +557,46 @@ progress {
   border-color: rgba(61, 214, 140, 0.4);
 }
 
+/* ---- Benchmark table ------------------------------------------------- */
+.benchmark-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.benchmark-table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.benchmark-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.benchmark-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.benchmark-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.benchmark-table .benchmark-best td:first-child {
+  font-weight: 650;
+}
+.benchmark-table .benchmark-best td:first-child::after {
+  content: ' ⚡';
+}
+.benchmark-table .benchmark-best td:last-child {
+  color: var(--ok);
+  font-weight: 650;
+}
+.benchmark-fail td {
+  color: var(--err);
+}
+
 /* ---- ErrorBoundary fallback ------------------------------------------ */
 .error-fallback {
   max-width: 520px;

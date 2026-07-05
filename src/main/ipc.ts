@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron'
-import { rmSync, writeFileSync } from 'fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
 import { basename, join } from 'path'
 import { convertToWav16k } from './ffmpeg'
 import { addHistory, clearHistory, deleteHistory, searchHistory } from './history'
@@ -20,7 +21,8 @@ import { setStatus } from './status'
 import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
 import { applyVocabulary, buildInitialPrompt } from './vocabulary'
 import { detectGpu, transcribeWav, whisperBinary } from './whisper'
-import type { Settings, StopOptions, TranscriptionResult } from '../shared/types'
+import { ensureServer } from './whisper-server'
+import type { BenchmarkResult, Settings, StopOptions, TranscriptionResult } from '../shared/types'
 
 // All handlers return { ok, data | error } so the renderer receives the exact
 // user-facing message instead of Electron's "Error invoking remote method"
@@ -36,6 +38,36 @@ function handle(channel: string, fn: (...args: any[]) => unknown | Promise<unkno
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
+}
+
+/** Generates a 16 kHz mono WAV file with a 1 kHz sine wave for benchmarking. */
+function generateBenchWav(durationSec: number): string {
+  const sampleRate = 16000
+  const numSamples = sampleRate * durationSec
+  const pcm = Buffer.alloc(numSamples * 2)
+  for (let i = 0; i < numSamples; i++) {
+    // 1 kHz sine at ~10 % amplitude — enough to avoid whisper VAD skipping it.
+    const val = Math.round(Math.sin((2 * Math.PI * 1000 * i) / sampleRate) * 3000)
+    pcm.writeInt16LE(val, i * 2)
+  }
+  const header = Buffer.alloc(44)
+  header.write('RIFF', 0)
+  header.writeUInt32LE(36 + pcm.length, 4)
+  header.write('WAVE', 8)
+  header.write('fmt ', 12)
+  header.writeUInt32LE(16, 16)
+  header.writeUInt16LE(1, 20)
+  header.writeUInt16LE(1, 22)
+  header.writeUInt32LE(sampleRate, 24)
+  header.writeUInt32LE(sampleRate * 2, 28)
+  header.writeUInt16LE(2, 32)
+  header.writeUInt16LE(16, 34)
+  header.write('data', 36)
+  header.writeUInt32LE(pcm.length, 40)
+  const dir = mkdtempSync(join(tmpdir(), 'localscribe-bench-'))
+  const path = join(dir, 'benchmark.wav')
+  writeFileSync(path, Buffer.concat([header, pcm]))
+  return path
 }
 
 export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandlers: HotkeyHandlers): void {
@@ -61,10 +93,70 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
     )
     // Only announce completion for a real finish — not for duplicate download
     // requests or user cancellations.
-    if (completed) send('models:progress', { id, fraction: null })
+    if (completed) {
+      send('models:progress', { id, fraction: null })
+      // If this model matches the current setting, start the resident server.
+      const s = getSettings()
+      if (s.model === id) {
+        ensureServer(modelPath(id), s.forceCpu).catch((err) =>
+          console.warn('whisper-server start after download failed:', err)
+        )
+      }
+    }
   })
   handle('models:cancel', (id: string) => cancelDownload(id))
   handle('models:delete', (id: string) => deleteModel(id))
+
+  // --- Model benchmark ---------------------------------------------------
+  handle('models:benchmark', async () => {
+    const allModels = listModels()
+    const downloaded = allModels.filter((m) => m.downloaded)
+    if (downloaded.length < 2) {
+      throw new Error('Download at least two models to run a benchmark.')
+    }
+    const settings = getSettings()
+    const BENCH_DURATION_SEC = 30
+    const testWav = generateBenchWav(BENCH_DURATION_SEC)
+    const results: BenchmarkResult[] = []
+    try {
+      for (let i = 0; i < downloaded.length; i++) {
+        const m = downloaded[i]
+        send('models:benchmarkProgress', { count: i, total: downloaded.length, modelId: m.id, modelLabel: m.label })
+        const t0 = Date.now()
+        try {
+          await transcribeWav(testWav, modelPath(m.id), {
+            language: 'en', // skip language detection on the synthetic test clip
+            forceCpu: settings.forceCpu,
+            forceCli: true // bypass whisper-server for apples-to-apples cold-start timing
+          })
+          const elapsed = Date.now() - t0
+          const audioMs = BENCH_DURATION_SEC * 1000
+          results.push({
+            modelId: m.id,
+            modelLabel: m.label,
+            elapsedMs: elapsed,
+            audioDurationMs: audioMs,
+            realTimeFactor: Math.round((elapsed / audioMs) * 100) / 100,
+            success: true
+          })
+        } catch (err) {
+          results.push({
+            modelId: m.id,
+            modelLabel: m.label,
+            elapsedMs: 0,
+            audioDurationMs: BENCH_DURATION_SEC * 1000,
+            realTimeFactor: 0,
+            success: false,
+            error: err instanceof Error ? err.message : String(err)
+          })
+        }
+      }
+      send('models:benchmarkProgress', { count: downloaded.length, total: downloaded.length, modelId: null, modelLabel: null })
+      return results
+    } finally {
+      rmSync(testWav, { force: true })
+    }
+  })
 
   // --- Settings -----------------------------------------------------------
   handle('settings:get', () => getSettings())
@@ -74,6 +166,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
     if (patch.llm) {
       warmupOllama(next.llm) // pick up a newly configured Ollama model right away
       notifyIfOllamaModelMissing(next.llm)
+    }
+    // Hot-swap the resident whisper-server when the model or GPU toggle changes.
+    if (patch.model !== undefined || patch.forceCpu !== undefined) {
+      ensureServer(modelPath(next.model), next.forceCpu).catch((err) =>
+        console.warn('whisper-server restart failed:', err)
+      )
     }
     return next
   })
