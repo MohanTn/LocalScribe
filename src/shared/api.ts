@@ -18,6 +18,7 @@ export type ReceiveChannel =
   | 'status'
   | 'models:progress'
   | 'transcribe:partial'
+  | 'transcribe:result'
   | 'record:toggle'
   | 'ptt:down'
   | 'ptt:up'
@@ -65,6 +66,11 @@ export interface LocalScribeApi {
   copyText: (text: string) => Promise<void>
   engineInfo: () => Promise<{ backend: 'metal' | 'cuda' | 'vulkan' | 'cpu'; binaryPath: string | null }>
   appVersion: () => Promise<string>
+  /** Current app status — pulled on mount since a surface that mounts after
+   *  the fact (mini widget) would otherwise miss the 'status' push. */
+  getStatus: () => Promise<AppStatus>
+  /** Last final transcript text, for the same late-mount reason. */
+  getLastTranscript: () => Promise<string>
   update: {
     /** Current status — pulled on mount since the push can fire before a
      *  fresh window subscribes to it. */
@@ -78,6 +84,15 @@ export interface LocalScribeApi {
   pathForFile: (file: File) => string
   /** Subscribes to a main->renderer event. Returns an unsubscribe function. */
   on: (channel: ReceiveChannel, cb: (...args: unknown[]) => void) => () => void
+  window: {
+    /** Hides the main window and shows the small always-on-top mini widget. */
+    enterMini: () => Promise<void>
+    /** Hides the mini widget and restores the main window as it was. */
+    exitMini: () => Promise<void>
+    /** Same effect as the toggle hotkey, but never auto-pastes on completion —
+     *  the mini widget is a manual record -> stop -> copy flow. */
+    toggleRecording: () => Promise<void>
+  }
 }
 
 declare global {
