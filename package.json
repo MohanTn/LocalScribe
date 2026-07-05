@@ -34,8 +34,7 @@
     "ffmpeg-static": "^5.2.0"
   },
   "optionalDependencies": {
-    "dbus-next": "^0.10.2",
-    "uiohook-napi": "^1.5.5"
+    "dbus-next": "^0.10.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
