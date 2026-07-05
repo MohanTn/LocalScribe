@@ -30,9 +30,11 @@
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
     "better-sqlite3": "^11.7.0",
-    "dbus-next": "^0.10.2",
     "electron-updater": "^6.8.9",
-    "ffmpeg-static": "^5.2.0",
+    "ffmpeg-static": "^5.2.0"
+  },
+  "optionalDependencies": {
+    "dbus-next": "^0.10.2",
     "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
