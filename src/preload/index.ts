@@ -16,7 +16,8 @@ const RECEIVE_CHANNELS: ReceiveChannel[] = [
   'navigate',
   'ollama:modelMissing',
   'llm:pullProgress',
-  'update:status'
+  'update:status',
+  'models:benchmarkProgress'
 ]
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
@@ -32,7 +33,8 @@ const api: LocalScribeApi = {
     list: () => invoke('models:list'),
     download: (id) => invoke('models:download', id),
     cancel: (id) => invoke('models:cancel', id),
-    delete: (id) => invoke('models:delete', id)
+    delete: (id) => invoke('models:delete', id),
+    benchmark: () => invoke('models:benchmark')
   },
   settings: {
     get: () => invoke('settings:get'),

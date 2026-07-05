@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { listMicrophones } from '../lib/recorder'
 import { useStore } from '../store'
-import type { Settings, UpdateStatus, VocabularyEntry } from '../../../shared/api'
+import type { BenchmarkResult, Settings, UpdateStatus, VocabularyEntry } from '../../../shared/api'
 
 // ---- Hotkey capture ---------------------------------------------------------
 
@@ -81,6 +81,10 @@ export default function SettingsView(): React.JSX.Element {
   const setSettings = useStore((s) => s.setSettings)
   const setModels = useStore((s) => s.setModels)
   const notify = useStore((s) => s.notify)
+  const benchmarkProgress = useStore((s) => s.benchmarkProgress)
+  const benchmarkResults = useStore((s) => s.benchmarkResults)
+  const setBenchmarkProgress = useStore((s) => s.setBenchmarkProgress)
+  const setBenchmarkResults = useStore((s) => s.setBenchmarkResults)
   const [mics, setMics] = useState<Array<{ id: string; label: string }>>([])
   const [engine, setEngine] = useState<{ backend: string; binaryPath: string | null } | null>(null)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
@@ -121,6 +125,29 @@ export default function SettingsView(): React.JSX.Element {
     (next: VocabularyEntry[]) => void update({ vocabulary: next }),
     [update]
   )
+
+  const runBenchmark = useCallback(async () => {
+    setBenchmarkResults(null)
+    setBenchmarkProgress('Starting benchmark…')
+    try {
+      const results = await window.api.models.benchmark()
+      setBenchmarkResults(results)
+      setBenchmarkProgress(null)
+    } catch (err) {
+      setBenchmarkProgress(null)
+      notify(err instanceof Error ? err.message : String(err))
+    }
+  }, [setBenchmarkProgress, setBenchmarkResults, notify])
+
+  // Listen for benchmark progress events pushed by main while the handler runs.
+  useEffect(() => {
+    return window.api.on('models:benchmarkProgress', (payload) => {
+      const p = payload as { count: number; total: number; modelId: string | null; modelLabel: string | null }
+      if (p.modelId) {
+        setBenchmarkProgress(`Benchmarking ${p.modelLabel} (${p.count}/${p.total})…`)
+      }
+    })
+  }, [setBenchmarkProgress])
 
   const checkForUpdates = useCallback(async () => {
     setCheckingUpdate(true)
@@ -216,6 +243,72 @@ export default function SettingsView(): React.JSX.Element {
             </li>
           ))}
         </ul>
+
+        <div className="benchmark-section">
+          <p className="muted">
+            Compare transcription speed across downloaded models using a 30-second test clip
+            (language forced to English for consistency).
+            Lower real-time factor (RTF) means faster transcription.
+            English-only (.en) models are typically faster than their multilingual counterparts.
+          </p>
+          {benchmarkProgress ? (
+            <div className="field">
+              <button disabled>{benchmarkProgress}</button>
+            </div>
+          ) : (
+            <div className="field">
+              <button
+                onClick={() => void runBenchmark()}
+                disabled={downloaded.length < 2}
+              >
+                Benchmark Models
+              </button>
+              {downloaded.length < 2 && (
+                <span className="muted">Download at least two models to benchmark</span>
+              )}
+            </div>
+          )}
+
+          {benchmarkResults && benchmarkResults.length > 0 && (
+            <table className="benchmark-table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Time</th>
+                  <th>RTF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {benchmarkResults
+                  .slice()
+                  .sort((a, b) => a.elapsedMs - b.elapsedMs)
+                  .map((r) => {
+                    const bestMs = benchmarkResults
+                      .filter((x) => x.success)
+                      .reduce((min, x) => (x.elapsedMs < min ? x.elapsedMs : min), Infinity)
+                    return (
+                      <tr
+                        key={r.modelId}
+                        className={!r.success ? 'benchmark-fail' : r.elapsedMs === bestMs ? 'benchmark-best' : ''}
+                      >
+                        <td>{r.modelLabel}</td>
+                        <td>
+                          {r.success
+                            ? `${(r.elapsedMs / 1000).toFixed(1)} s`
+                            : r.error}
+                        </td>
+                        <td>
+                          {r.success
+                            ? `${r.realTimeFactor.toFixed(2)}×`
+                            : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </section>
 
       <section>

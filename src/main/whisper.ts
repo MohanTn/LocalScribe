@@ -3,15 +3,16 @@ import { existsSync, readFileSync, rmSync } from 'fs'
 import { cpus } from 'os'
 import { delimiter, join } from 'path'
 import { app } from 'electron'
+import { isServerAvailable, transcribeViaServer } from './whisper-server'
 import type { Segment, Word } from '../shared/types'
 
 // ---------------------------------------------------------------------------
 // Binary discovery
 //
-// We spawn the whisper.cpp CLI per job rather than keeping a resident engine:
-// it keeps idle memory near zero (the <150MB tray budget) and isolates crashes
-// in native code from the app. Model load cost is acceptable for tiny..small;
-// heavy models amortize it over long transcriptions.
+// transcribeWav() prefers the resident whisper-server (keeps the model loaded
+// across jobs — no cold-start penalty). When the server isn't available it
+// falls back to spawning the whisper.cpp CLI per job, which keeps idle memory
+// near zero but pays the model-load cost each time.
 // ---------------------------------------------------------------------------
 
 function candidates(): string[] {
@@ -84,6 +85,8 @@ export interface TranscribeOptions {
   forceCpu?: boolean
   /** Biases decoding toward these terms (see vocabulary.ts's buildInitialPrompt). */
   initialPrompt?: string
+  /** Bypass whisper-server and spawn the CLI directly (used for benchmarking). */
+  forceCli?: boolean
 }
 
 export interface WhisperOutput {
@@ -108,6 +111,16 @@ export async function transcribeWav(
   modelPath: string,
   opts: TranscribeOptions = {}
 ): Promise<WhisperOutput> {
+  // Use the resident whisper-server when available — model stays loaded between
+  // transcriptions, avoiding the cold-start disk-read + GPU-alloc penalty.
+  if (!opts.forceCli && isServerAvailable()) {
+    try {
+      return await transcribeViaServer(wavPath, opts)
+    } catch (err) {
+      console.warn('whisper-server transcription failed, falling back to CLI:', err)
+    }
+  }
+
   const bin = whisperBinary()
   if (!bin) {
     throw new Error(

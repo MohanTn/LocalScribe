@@ -129,4 +129,18 @@ export interface StopOptions {
   autoPaste: boolean
 }
 
+export interface BenchmarkResult {
+  modelId: string
+  modelLabel: string
+  /** Wall-clock transcription time in ms. */
+  elapsedMs: number
+  /** Test audio duration in ms. */
+  audioDurationMs: number
+  /** Real-time factor (elapsed / duration); lower is faster. <1 = faster than real-time. */
+  realTimeFactor: number
+  success: boolean
+  /** Present only when success is false. */
+  error?: string
+}
+
 export type UserError = { message: string; hint?: string }

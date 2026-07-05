@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type {
   AppStatus,
+  BenchmarkResult,
   HistoryEntry,
   ModelInfo,
   Settings,
@@ -32,6 +33,9 @@ interface AppState {
   /** 0..1, or null while Ollama hasn't reported a size yet. */
   ollamaPullFraction: number | null
   updateStatus: UpdateStatus
+  /** Benchmark: progress text + results. */
+  benchmarkProgress: string | null
+  benchmarkResults: BenchmarkResult[] | null
 
   setStatus: (s: AppStatus) => void
   setView: (v: View) => void
@@ -49,6 +53,8 @@ interface AppState {
   setOllamaPulling: (pulling: boolean) => void
   setOllamaPullFraction: (fraction: number | null) => void
   setUpdateStatus: (status: UpdateStatus) => void
+  setBenchmarkProgress: (text: string | null) => void
+  setBenchmarkResults: (results: BenchmarkResult[] | null) => void
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -67,6 +73,8 @@ export const useStore = create<AppState>((set) => ({
   ollamaPulling: false,
   ollamaPullFraction: null,
   updateStatus: { state: 'idle' },
+  benchmarkProgress: null,
+  benchmarkResults: null,
 
   setStatus: (status) => set({ status }),
   setView: (view) => set({ view }),
@@ -90,5 +98,7 @@ export const useStore = create<AppState>((set) => ({
   setOllamaMissingModel: (ollamaMissingModel) => set({ ollamaMissingModel }),
   setOllamaPulling: (ollamaPulling) => set({ ollamaPulling }),
   setOllamaPullFraction: (ollamaPullFraction) => set({ ollamaPullFraction }),
-  setUpdateStatus: (updateStatus) => set({ updateStatus })
+  setUpdateStatus: (updateStatus) => set({ updateStatus }),
+  setBenchmarkProgress: (benchmarkProgress) => set({ benchmarkProgress }),
+  setBenchmarkResults: (benchmarkResults) => set({ benchmarkResults })
 }))

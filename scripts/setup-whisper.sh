@@ -67,3 +67,22 @@ DEST_NAME="whisper-cli"
 [[ "$BIN" == *.exe ]] && DEST_NAME="whisper-cli.exe"
 cp "$BIN" "$DEST/$DEST_NAME"
 echo "==> Installed $(basename "$BIN") to vendor/whisper/$DEST_NAME"
+
+# Also install whisper-server (resident HTTP server — localhost-only) so the
+# model stays loaded between transcriptions instead of being reloaded per job.
+SERV_BIN=""
+for candidate in \
+  "$BUILD_DIR/build/bin/whisper-server" \
+  "$BUILD_DIR/build/bin/whisper-server.exe" \
+  "$BUILD_DIR/build/bin/Release/whisper-server.exe"; do
+  if [ -f "$candidate" ]; then
+    SERV_BIN="$candidate"
+    break
+  fi
+done
+if [ -n "$SERV_BIN" ]; then
+  S_DEST_NAME="whisper-server"
+  [[ "$SERV_BIN" == *.exe ]] && S_DEST_NAME="whisper-server.exe"
+  cp "$SERV_BIN" "$DEST/$S_DEST_NAME"
+  echo "==> Installed $(basename "$SERV_BIN") to vendor/whisper/$S_DEST_NAME"
+fi
