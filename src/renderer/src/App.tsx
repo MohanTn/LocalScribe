@@ -206,6 +206,13 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="app">
+      <button
+        className="compact-mode-btn"
+        onClick={() => void window.api.window.enterMini()}
+        title="Compact mode: small always-on-top widget"
+      >
+        ⤢
+      </button>
       <Sidebar />
       <main className="main">
         <div className="notice-stack">

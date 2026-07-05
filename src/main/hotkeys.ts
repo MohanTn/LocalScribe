@@ -1,4 +1,5 @@
 import { globalShortcut } from 'electron'
+import { stopPortalHotkeys, tryStartPortalHotkeys } from './hotkeysPortal'
 import type { Settings } from '../shared/types'
 
 export interface HotkeyHandlers {
@@ -8,11 +9,28 @@ export interface HotkeyHandlers {
 }
 
 // Electron's globalShortcut fires on key *press* only — fine for the toggle
-// hotkey, but push-to-talk needs the key-up event. For that we use the
-// optional uiohook-napi native hook when it is installed (see README); when it
-// isn't, the PTT combo degrades gracefully to a second toggle shortcut.
+// hotkey in principle, but two things push both hotkeys onto the optional
+// uiohook-napi native hook (see README) when it's installed: (1) push-to-talk
+// needs the key-*up* event, which globalShortcut can't observe at all, and
+// (2) globalShortcut grabs keys via X11 (through XWayland on a Wayland
+// session), which silently misses native-Wayland client windows. uiohook's
+// Linux backend is also X11-only (XRecord — see libuiohook/src/x11), so it
+// has the *same* native-Wayland blind spot as globalShortcut; it only fixes
+// the key-release limitation. Without uiohook, PTT degrades gracefully to a
+// second toggle shortcut, and the toggle hotkey falls back to globalShortcut
+// (fine on X11, flaky on Wayland — see README's hotkey reliability table).
+//
+// On Linux, applyHotkeys also tries the xdg-desktop-portal GlobalShortcuts
+// backend (hotkeysPortal.ts) in the background after registering the tiers
+// above. That portal is implemented by the compositor itself, so it has no
+// X11/native-Wayland blind spot at all — but it only accepts calls from a
+// process the compositor can attribute to an installed app (a systemd
+// app-id cgroup scope, which GNOME assigns when launched from a .desktop
+// entry). If it binds successfully, the globalShortcut/uiohook registration
+// above is torn down so hotkeys don't double-fire; if it fails (dev mode, no
+// portal, older desktop), that registration is left in place untouched.
 
-interface PttBinding {
+interface KeyBinding {
   keycode: number
   ctrl: boolean
   alt: boolean
@@ -25,9 +43,27 @@ type UiohookModule = any
 
 let uiohook: UiohookModule = undefined
 let uiohookListening = false
-let ptt: PttBinding | null = null
+let ptt: KeyBinding | null = null
 let pttHeld = false
+let pttReleaseTimer: NodeJS.Timeout | null = null
+let toggleBinding: KeyBinding | null = null
+let toggleHeld = false
+let toggleReleaseTimer: NodeJS.Timeout | null = null
 let handlers: HotkeyHandlers | null = null
+// Bumped on every applyHotkeys call so a slow, superseded portal-bind
+// attempt (see below) can tell it's stale once it resolves and back off
+// instead of tearing down whatever a newer call already set up.
+let applyEpoch = 0
+
+// Without XKB "detectable autorepeat" (not guaranteed on every X server/DE),
+// holding a key past the OS repeat delay makes X11 emit rapid keyup+keydown
+// pairs for that key instead of only repeated keydowns. Read literally, that
+// looks like the combo being released and re-pressed, which would flap
+// toggle/PTT on and off while the user is still holding it down. Delaying the
+// "released" transition briefly — and cancelling it if the same combo comes
+// back down first — absorbs those repeat artifacts while adding no
+// perceptible lag to a genuine release.
+const REPEAT_DEBOUNCE_MS = 70
 
 function loadUiohook(): UiohookModule {
   if (uiohook !== undefined) return uiohook
@@ -43,35 +79,66 @@ function loadUiohook(): UiohookModule {
 /** (Re-)binds all global shortcuts from settings. Safe to call repeatedly. */
 export function applyHotkeys(settings: Settings, h: HotkeyHandlers): void {
   handlers = h
+  const epoch = ++applyEpoch
+  stopPortalHotkeys()
   globalShortcut.unregisterAll()
+  clearHeldState()
   ptt = null
+  toggleBinding = null
+
+  const mod = loadUiohook()
 
   if (settings.hotkeyToggle) {
-    try {
-      globalShortcut.register(settings.hotkeyToggle, () => handlers?.onToggle())
-    } catch {
-      console.warn(`Invalid toggle hotkey: ${settings.hotkeyToggle}`)
+    if (mod) {
+      toggleBinding = parseCombo(settings.hotkeyToggle, mod.UiohookKey)
+      if (!toggleBinding) console.warn(`Could not parse toggle hotkey: ${settings.hotkeyToggle}`)
+    } else {
+      try {
+        globalShortcut.register(settings.hotkeyToggle, () => handlers?.onToggle())
+      } catch {
+        console.warn(`Invalid toggle hotkey: ${settings.hotkeyToggle}`)
+      }
     }
   }
 
-  if (!settings.hotkeyPtt) return
-  const mod = loadUiohook()
-  if (mod) {
-    ptt = parseCombo(settings.hotkeyPtt, mod.UiohookKey)
-    if (ptt) startUiohook(mod)
-    else console.warn(`Could not parse PTT hotkey: ${settings.hotkeyPtt}`)
-  } else {
-    // Fallback: hold-to-talk becomes press-to-start / press-to-stop.
-    try {
-      globalShortcut.register(settings.hotkeyPtt, () => handlers?.onToggle())
-    } catch {
-      console.warn(`Invalid PTT hotkey: ${settings.hotkeyPtt}`)
+  if (settings.hotkeyPtt) {
+    if (mod) {
+      ptt = parseCombo(settings.hotkeyPtt, mod.UiohookKey)
+      if (!ptt) console.warn(`Could not parse PTT hotkey: ${settings.hotkeyPtt}`)
+    } else {
+      // Fallback: hold-to-talk becomes press-to-start / press-to-stop.
+      try {
+        globalShortcut.register(settings.hotkeyPtt, () => handlers?.onToggle())
+      } catch {
+        console.warn(`Invalid PTT hotkey: ${settings.hotkeyPtt}`)
+      }
     }
+  }
+
+  if (mod && (toggleBinding || ptt)) startUiohook(mod)
+
+  if (process.platform === 'linux' && (settings.hotkeyToggle || settings.hotkeyPtt)) {
+    tryStartPortalHotkeys(settings, {
+      onToggle: () => handlers?.onToggle(),
+      onPttDown: () => handlers?.onPttDown(),
+      onPttUp: () => handlers?.onPttUp()
+    }).then((active) => {
+      if (epoch !== applyEpoch) {
+        // A newer applyHotkeys call already superseded this attempt — don't
+        // leave an orphaned portal session/listeners running.
+        if (active) stopPortalHotkeys()
+        return
+      }
+      if (active) stopFallbackHotkeys()
+    })
   }
 }
 
-export function unregisterHotkeys(): void {
+/** Tears down the globalShortcut/uiohook tier once the portal has bound
+ *  successfully, so hotkeys don't fire twice. */
+function stopFallbackHotkeys(): void {
   globalShortcut.unregisterAll()
+  clearHeldState()
   if (uiohook && uiohookListening) {
     try {
       uiohook.uIOhook.stop()
@@ -82,37 +149,89 @@ export function unregisterHotkeys(): void {
   }
 }
 
+export function unregisterHotkeys(): void {
+  applyEpoch++
+  stopPortalHotkeys()
+  stopFallbackHotkeys()
+}
+
+/** Cancels pending release-debounce timers so a stale one can't fire onPttUp
+ *  (or resurrect toggleHeld) after hotkeys are unregistered or rebound. */
+function clearHeldState(): void {
+  if (toggleReleaseTimer) {
+    clearTimeout(toggleReleaseTimer)
+    toggleReleaseTimer = null
+  }
+  if (pttReleaseTimer) {
+    clearTimeout(pttReleaseTimer)
+    pttReleaseTimer = null
+  }
+  toggleHeld = false
+  pttHeld = false
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function matchesBinding(e: any, binding: KeyBinding): boolean {
+  return (
+    e.keycode === binding.keycode &&
+    !!e.ctrlKey === binding.ctrl &&
+    !!e.altKey === binding.alt &&
+    !!e.shiftKey === binding.shift &&
+    !!e.metaKey === binding.meta
+  )
+}
+
 function startUiohook(mod: UiohookModule): void {
   if (uiohookListening) return
   uiohookListening = true
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mod.uIOhook.on('keydown', (e: any) => {
-    if (!ptt || pttHeld) return
-    if (
-      e.keycode === ptt.keycode &&
-      !!e.ctrlKey === ptt.ctrl &&
-      !!e.altKey === ptt.alt &&
-      !!e.shiftKey === ptt.shift &&
-      !!e.metaKey === ptt.meta
-    ) {
-      pttHeld = true
-      handlers?.onPttDown()
+    // Toggle fires once per physical press, guarded the same way PTT guards
+    // against repeat keydowns while a key is held. A pending release is
+    // cancelled here too: if it fires, this keydown is a repeat artifact for
+    // an already-held combo, not a fresh press.
+    if (toggleBinding && matchesBinding(e, toggleBinding)) {
+      if (toggleReleaseTimer) {
+        clearTimeout(toggleReleaseTimer)
+        toggleReleaseTimer = null
+      } else if (!toggleHeld) {
+        toggleHeld = true
+        handlers?.onToggle()
+      }
+    }
+    if (ptt && matchesBinding(e, ptt)) {
+      if (pttReleaseTimer) {
+        clearTimeout(pttReleaseTimer)
+        pttReleaseTimer = null
+      } else if (!pttHeld) {
+        pttHeld = true
+        handlers?.onPttDown()
+      }
     }
   })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mod.uIOhook.on('keyup', (e: any) => {
+    if (toggleHeld && toggleBinding && e.keycode === toggleBinding.keycode) {
+      toggleReleaseTimer = setTimeout(() => {
+        toggleHeld = false
+        toggleReleaseTimer = null
+      }, REPEAT_DEBOUNCE_MS)
+    }
     if (pttHeld && ptt && e.keycode === ptt.keycode) {
-      pttHeld = false
-      handlers?.onPttUp()
+      pttReleaseTimer = setTimeout(() => {
+        pttHeld = false
+        pttReleaseTimer = null
+        handlers?.onPttUp()
+      }, REPEAT_DEBOUNCE_MS)
     }
   })
   mod.uIOhook.start()
 }
 
 /** Parses "Ctrl+Shift+Space" style combos into a uiohook keycode + modifiers. */
-function parseCombo(combo: string, keyTable: Record<string, number>): PttBinding | null {
+function parseCombo(combo: string, keyTable: Record<string, number>): KeyBinding | null {
   const parts = combo.split('+').map((p) => p.trim())
-  const binding: PttBinding = { keycode: -1, ctrl: false, alt: false, shift: false, meta: false }
+  const binding: KeyBinding = { keycode: -1, ctrl: false, alt: false, shift: false, meta: false }
   for (const part of parts) {
     const p = part.toLowerCase()
     if (p === 'ctrl' || p === 'control' || p === 'commandorcontrol') binding.ctrl = true

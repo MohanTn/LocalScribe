@@ -390,6 +390,27 @@ textarea {
   z-index: 1;
 }
 
+.compact-mode-btn {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 0;
+}
+.compact-mode-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
 /* ---- Notices ------------------------------------------------------------ */
 
 .notice-stack {

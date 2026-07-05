@@ -354,6 +354,12 @@ export default function SettingsView(): React.JSX.Element {
           />
           Auto-paste into the active app after hotkey transcription
         </label>
+        <span className="muted">
+          Hotkey transcripts are always copied to the clipboard. This only controls whether
+          LocalScribe additionally simulates Ctrl+V for you — on Linux/Wayland that simulated
+          keystroke is what triggers a &quot;Remote Desktop&quot; permission prompt from your
+          compositor every time, so turn it off if you&apos;d rather paste manually.
+        </span>
         <label className="field checkbox">
           <input
             type="checkbox"

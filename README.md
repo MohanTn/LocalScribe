@@ -130,15 +130,15 @@ To use a custom `whisper-cli`, point `WHISPER_CPP_BIN` at it. The app's binary l
 | -------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------- |
 | Microphone     | Prompted automatically on first record                                                 | Settings → Privacy & security → Microphone → enable desktop apps     | ALSA / PulseAudio / PipeWire — no extra step   |
 | Auto-paste     | Grant **Accessibility** *and* **Input Monitoring** in System Settings → Privacy & Security | Works out of the box (PowerShell `SendKeys`)                         | Install `xdotool` (X11) or `ydotool` (Wayland) |
-| Global hotkeys | Native; works everywhere                                                               | Native                                                               | Native on X11; flaky on pure Wayland           |
+| Global hotkeys | Native; works everywhere                                                               | Native                                                               | Native on X11; flaky on pure Wayland (see below) |
 
 If Accessibility is denied on macOS, paste falls back to a visible warning — re-grant it from System Settings.
 
 On Linux, LocalScribe prefers `ydotool` on Wayland (no per-paste permission prompt) and `xdotool` on X11, but automatically falls back to whichever tool actually works if the preferred one fails. A common ydotool failure mode: the `ydotoold` daemon isn't running, or your user lacks access to `/dev/uinput` (add yourself to the `input` group, or run `ydotoold` as a service that has that access). If both tools fail or neither is installed, the transcript still lands on your clipboard and LocalScribe tells you to paste manually with Ctrl+V.
 
-## Push-to-talk (optional native hook)
+## Push-to-talk & reliable hotkeys on Wayland (optional native hook)
 
-Electron's `globalShortcut` cannot observe key-*release*, which true hold-to-talk needs. Without this hook the PTT shortcut acts as a second toggle key.
+Electron's `globalShortcut` cannot observe key-*release*, which true hold-to-talk needs. Installing `uiohook-napi` fixes that. It does **not** fix the other Wayland limitation, though: `globalShortcut` grabs keys via X11 (through XWayland on a Wayland session), so it silently never sees native-Wayland windows — e.g. a terminal emulator running as a native Wayland client won't respond to the hotkey while it's focused, even though the hotkey works fine for X11/XWayland windows — and on Linux, `uiohook-napi` uses the same X11 mechanism (`XRecord`) under the hood, so it has the identical blind spot. Without uiohook, PTT degrades to a second toggle shortcut, and the toggle hotkey keeps using `globalShortcut` (fine on X11, flaky on pure Wayland).
 
 ```bash
 # Linux only — X11 dev headers needed for uiohook-napi to compile:
@@ -149,6 +149,14 @@ npm run postinstall      # rebuild native modules against Electron's Node ABI
 ```
 
 Restart the app after installing. On macOS, you'll also be prompted for **Input Monitoring** permission the first time PTT fires.
+
+### GNOME/Wayland: the GlobalShortcuts portal
+
+On Linux, LocalScribe also tries the `org.freedesktop.portal.GlobalShortcuts` D-Bus portal in the background, in addition to the tiers above. Unlike `globalShortcut` and uiohook, it's implemented by the compositor itself, so it has no X11/native-Wayland blind spot — it works correctly even while a native-Wayland terminal is focused.
+
+It only works for an **installed, `.desktop`-launched** copy of the app: GNOME needs to attribute the calling process to a systemd `app-<id>-<pid>.scope`, which it assigns automatically when you launch from the app grid/dock, but not for `npm run dev` or a bare CLI launch. When it's unavailable — dev mode, non-GNOME desktops without a portal backend, older GNOME versions — LocalScribe falls back to the `globalShortcut`/uiohook tiers silently; there's nothing to install or configure.
+
+One caveat: the portal binds by its own shortcut IDs and only takes your configured hotkey as a *hint* for the first-time system confirmation dialog — the actual key combo can end up being whatever GNOME's dialog assigns, independent of the hotkey field in LocalScribe's own Settings. This is a known rough edge, not yet reconciled.
 
 ## Packaging
 
