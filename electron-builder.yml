@@ -46,8 +46,9 @@ nsis:
 linux:
   target:
     - AppImage
-    - target: deb
-      depends:
-        - libappindicator3-1
+    - deb
   category: Utility
   synopsis: Local speech-to-text with whisper.cpp
+deb:
+  depends:
+    - libappindicator3-1

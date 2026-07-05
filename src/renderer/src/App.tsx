@@ -180,7 +180,9 @@ export default function App(): React.JSX.Element {
           useStore.getState().setModelProgress(id, fraction)
         }),
         window.api.on('transcribe:partial', (text) => useStore.getState().setPartial(text as string)),
-        window.api.on('record:toggle', () => toggleRecording(true)),
+        window.api.on('record:toggle', (payload) =>
+          toggleRecording((payload as { viaHotkey: boolean }).viaHotkey)
+        ),
         window.api.on('ptt:down', () => void startRecording(true)),
         window.api.on('ptt:up', () => void stopRecording()),
         window.api.on('navigate', (v) => useStore.getState().setView(v as View)),

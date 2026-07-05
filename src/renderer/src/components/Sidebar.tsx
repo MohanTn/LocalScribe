@@ -92,13 +92,22 @@ export default function Sidebar(): React.JSX.Element {
           <span className={`status-dot status-${status}`} />
           {!collapsed && <span className="status-label">{STATUS_LABEL[status]}</span>}
         </div>
-        <button
-          className="collapse-btn"
-          onClick={() => setCollapsed((c) => !c)}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? '»' : '«'}
-        </button>
+        <div className="sidebar-footer-actions">
+          <button
+            className="sidebar-icon-btn"
+            onClick={() => void window.api.window.enterMini()}
+            title="Compact mode: small always-on-top widget"
+          >
+            ⤢
+          </button>
+          <button
+            className="sidebar-icon-btn"
+            onClick={() => setCollapsed((c) => !c)}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? '»' : '«'}
+          </button>
+        </div>
       </div>
     </aside>
   )

@@ -10,6 +10,7 @@ const RECEIVE_CHANNELS: ReceiveChannel[] = [
   'status',
   'models:progress',
   'transcribe:partial',
+  'transcribe:result',
   'record:toggle',
   'ptt:down',
   'ptt:up',
@@ -62,12 +63,19 @@ const api: LocalScribeApi = {
   copyText: (text) => invoke('clipboard:copy', text),
   engineInfo: () => invoke('engine:info'),
   appVersion: () => invoke('app:version'),
+  getStatus: () => invoke('status:get'),
+  getLastTranscript: () => invoke('transcribe:getLast'),
   update: {
     status: () => invoke('update:getStatus'),
     check: () => invoke('update:check'),
     install: () => invoke('update:install')
   },
   pathForFile: (file) => webUtils.getPathForFile(file),
+  window: {
+    enterMini: () => invoke('window:enterMini'),
+    exitMini: () => invoke('window:exitMini'),
+    toggleRecording: () => invoke('window:toggleRecording')
+  },
   on: (channel, cb) => {
     if (!RECEIVE_CHANNELS.includes(channel)) {
       throw new Error(`Unknown channel: ${channel}`)

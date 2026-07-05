@@ -197,6 +197,15 @@ textarea {
   flex-direction: column;
 }
 
+.sidebar-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.collapsed .sidebar-footer-actions {
+  flex-direction: column;
+}
+
 .status-chip {
   display: flex;
   align-items: center;
@@ -242,11 +251,16 @@ textarea {
   }
 }
 
-.collapse-btn {
+.sidebar-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   background: none;
   border: none;
   color: var(--muted);
-  padding: 4px 8px;
+  padding: 0;
 }
 
 
@@ -595,6 +609,70 @@ progress {
 }
 .benchmark-fail td {
   color: var(--err);
+}
+
+/* ---- Mini widget (compact mode) --------------------------------------- */
+
+/* The whole window is the widget, so the background itself is the drag
+   handle; interactive controls opt back out with -webkit-app-region: no-drag. */
+.mini-app {
+  -webkit-app-region: drag;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.mini-record {
+  -webkit-app-region: no-drag;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.mini-record-core {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  transition: border-radius 150ms ease;
+}
+.mini-record.recording .mini-record-core {
+  border-radius: 4px; /* morphs into a stop square, same cue as the full record button */
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.mini-status {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+.mini-status-label {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-action {
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.mini-expand {
+  padding: 5px 8px;
 }
 
 /* ---- ErrorBoundary fallback ------------------------------------------ */

@@ -1,4 +1,4 @@
-import { BrowserWindow, app, shell } from 'electron'
+import { BrowserWindow, app, screen, shell } from 'electron'
 import { join } from 'path'
 import { initHistory } from './history'
 import { applyHotkeys, unregisterHotkeys, type HotkeyHandlers } from './hotkeys'
@@ -37,7 +37,12 @@ if (process.argv.includes('--version') || process.argv.includes('-v')) {
 }
 
 let mainWindow: BrowserWindow | null = null
+let miniWindow: BrowserWindow | null = null
 let quitting = false
+
+const MINI_WIDTH = 240
+const MINI_HEIGHT = 72
+const MINI_MARGIN = 16
 
 // Recording is *initiated* in main (hotkeys, tray) but *captured* in the
 // renderer (getUserMedia lives there), so these handlers just forward intent.
@@ -65,7 +70,11 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true, // renderer never touches Node directly
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Mini mode hides (not destroys) this window so its MicRecorder keeps
+      // capturing in the background; the default throttling of hidden
+      // renderers' timers would otherwise starve the audio chunk pipeline.
+      backgroundThrottling: false
     }
   })
 
@@ -95,9 +104,65 @@ function createWindow(): void {
 
 function showWindow(view?: string): void {
   if (!mainWindow) return
+  if (miniWindow?.isVisible()) miniWindow.hide()
   mainWindow.show()
   mainWindow.focus()
   if (view) mainWindow.webContents.send('navigate', view)
+}
+
+function miniPosition(): { x: number; y: number } {
+  const { x, y, width, height } = screen.getPrimaryDisplay().workArea
+  return { x: x + width - MINI_WIDTH - MINI_MARGIN, y: y + height - MINI_HEIGHT - MINI_MARGIN }
+}
+
+function createMiniWindow(): BrowserWindow {
+  const { x, y } = miniPosition()
+  const win = new BrowserWindow({
+    x,
+    y,
+    width: MINI_WIDTH,
+    height: MINI_HEIGHT,
+    show: false,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: '#101216',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  // Closing (e.g. Alt+F4 on Windows) should just return to the full window
+  // rather than tearing down the widget's webContents, since it's cheap to
+  // keep alive and re-showing it is instant.
+  win.on('close', (e) => {
+    if (!quitting) {
+      e.preventDefault()
+      exitMiniMode()
+    }
+  })
+
+  if (process.env['ELECTRON_RENDERER_URL']) {
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#mini`)
+  } else {
+    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'mini' })
+  }
+  return win
+}
+
+function enterMiniMode(): void {
+  if (!miniWindow || miniWindow.isDestroyed()) miniWindow = createMiniWindow()
+  const { x, y } = miniPosition()
+  miniWindow.setPosition(x, y)
+  miniWindow.show()
+  mainWindow?.hide()
+}
+
+function exitMiniMode(): void {
+  showWindow() // already hides miniWindow if visible
 }
 
 // Single instance: a second launch just raises the existing window.
@@ -109,7 +174,10 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     initHistory()
     createWindow()
-    registerIpc(() => mainWindow, hotkeyHandlers)
+    registerIpc(() => mainWindow, hotkeyHandlers, {
+      enterMini: enterMiniMode,
+      exitMini: exitMiniMode
+    })
     createTray({
       onToggleRecording: () => hotkeyHandlers.onToggle(),
       onOpen: () => showWindow(),
@@ -125,8 +193,13 @@ if (!app.requestSingleInstanceLock()) {
       console.warn('whisper-server failed to start; falling back to whisper-cli:', err)
     )
 
-    // Keep the renderer's status dot in sync from a single source of truth.
-    onStatus((s) => mainWindow?.webContents.send('status', s))
+    // Keep the renderer's status dot in sync from a single source of truth —
+    // both windows can be visible/hidden independently, so push to whichever
+    // are currently alive.
+    onStatus((s) => {
+      mainWindow?.webContents.send('status', s)
+      miniWindow?.webContents.send('status', s)
+    })
 
     initUpdater((s) => mainWindow?.webContents.send('update:status', s))
     // Best-effort: a failed startup check just leaves the Settings page's

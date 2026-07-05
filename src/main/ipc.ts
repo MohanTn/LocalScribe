@@ -17,7 +17,7 @@ import {
   tempTranscodeDir
 } from './recording'
 import { getSettings, updateSettings } from './settings'
-import { setStatus } from './status'
+import { getStatus, setStatus } from './status'
 import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
 import { applyVocabulary, buildInitialPrompt } from './vocabulary'
 import { detectGpu, transcribeWav, whisperBinary } from './whisper'
@@ -70,9 +70,28 @@ function generateBenchWav(durationSec: number): string {
   return path
 }
 
-export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandlers: HotkeyHandlers): void {
+export interface WindowActions {
+  enterMini: () => void
+  exitMini: () => void
+}
+
+export function registerIpc(
+  getWindow: () => BrowserWindow | null,
+  hotkeyHandlers: HotkeyHandlers,
+  windowActions: WindowActions
+): void {
   const send = (channel: string, ...args: unknown[]): void => {
     getWindow()?.webContents.send(channel, ...args)
+  }
+  // Last final transcript, so a surface that mounts *after* it landed (e.g.
+  // the mini widget, opened after a transcription already happened in the
+  // full window) can still pull it instead of only ever seeing new ones.
+  let lastResultText = ''
+  // Status/result pushes need to reach the mini widget too when it's the
+  // visible surface — unlike `send`, which targets the main window only
+  // (used for things only the main window's renderer acts on, e.g. navigate).
+  const broadcast = (channel: string, ...args: unknown[]): void => {
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, ...args)
   }
 
   // Best-effort: lets the renderer offer a "Pull now" prompt instead of the
@@ -241,6 +260,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
         durationMs: result.segments.at(-1)?.end ?? 0
       })
       setStatus('idle')
+      lastResultText = result.text
+      broadcast('transcribe:result', result.text)
       return result
     } catch (err) {
       setStatus('error')
@@ -276,6 +297,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
           ? await autoPaste(result.text)
           : null
       setStatus('idle')
+      lastResultText = result.text
+      broadcast('transcribe:result', result.text)
       return { result, paste }
     } catch (err) {
       setStatus('error')
@@ -302,6 +325,21 @@ export function registerIpc(getWindow: () => BrowserWindow | null, hotkeyHandler
   // the Async Clipboard API needs document focus/permission and fails
   // silently on some Linux sessions; writing from main sidesteps both.
   handle('clipboard:copy', (text: string) => clipboard.writeText(text))
+
+  // --- Mini widget (compact mode) --------------------------------------------
+  handle('window:enterMini', () => windowActions.enterMini())
+  handle('window:exitMini', () => windowActions.exitMini())
+  // Deliberately distinct from hotkeyHandlers.onToggle (which always sends
+  // viaHotkey: true and can trigger auto-paste): the mini widget is a manual
+  // record -> stop -> copy flow and must never auto-paste into whatever
+  // window happens to be focused.
+  handle('window:toggleRecording', () => send('record:toggle', { viaHotkey: false }))
+  // Pull-on-mount for surfaces that can appear after the fact (mini widget
+  // opened mid-recording, or after a transcript already landed elsewhere) —
+  // the push-only channels above would otherwise leave them stuck showing
+  // stale/default state until the next change.
+  handle('status:get', () => getStatus())
+  handle('transcribe:getLast', () => lastResultText)
 
   // --- Export ---------------------------------------------------------------
   handle('file:save', async (defaultName: string, content: string) => {
