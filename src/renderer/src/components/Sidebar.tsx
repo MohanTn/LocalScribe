@@ -95,13 +95,6 @@ export default function Sidebar(): React.JSX.Element {
         <div className="sidebar-footer-actions">
           <button
             className="sidebar-icon-btn"
-            onClick={() => void window.api.window.enterMini()}
-            title="Compact mode: small always-on-top widget"
-          >
-            ⤢
-          </button>
-          <button
-            className="sidebar-icon-btn"
             onClick={() => setCollapsed((c) => !c)}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >

@@ -292,6 +292,12 @@ export function registerIpc(
         durationMs: result.segments.at(-1)?.end ?? 0
       })
       const settings = getSettings()
+      // Always copy hotkey/tray-triggered results to the clipboard, even with
+      // auto-paste (the OS keystroke simulation below) turned off — disabling
+      // auto-paste is how a user stops the Linux Wayland Remote Desktop portal
+      // prompt that xdotool/ydotool trigger on every simulated keystroke, and
+      // they should still get the text on their clipboard to paste manually.
+      if (opts.autoPaste && result.text) clipboard.writeText(result.text)
       const paste =
         opts.autoPaste && settings.autoPaste && result.text
           ? await autoPaste(result.text)
