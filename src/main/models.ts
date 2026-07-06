@@ -14,6 +14,7 @@ const CATALOG: Array<{ id: string; label: string; approxSize: string }> = [
   { id: 'base', label: 'Base', approxSize: '142 MB' },
   { id: 'base.en', label: 'Base (English only)', approxSize: '142 MB' },
   { id: 'small', label: 'Small', approxSize: '466 MB' },
+  { id: 'small.en', label: 'Small (English only)', approxSize: '466 MB' },
   { id: 'medium', label: 'Medium', approxSize: '1.5 GB' },
   { id: 'large-v3', label: 'Large v3', approxSize: '2.9 GB' },
   { id: 'large-v3-turbo', label: 'Turbo (large-v3)', approxSize: '1.5 GB' }

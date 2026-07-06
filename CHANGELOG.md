@@ -6,4 +6,5 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Added
 
+- Adds a "Pause background media while recording" feature with platform-specific implementations (Linux: wpctl/pactl/amixer; macOS: AppleScript; Windows: PowerShell mute toggle). Includes comprehensive tests, Settings UI toggle, and integration into the recording start/stop IPC handlers.
 - Introduces D-Bus portal integration for reliable hotkey handling on GNOME/Wayland (avoiding X11's native-Wayland blind spot), refactors hotkey tiers into a three-layer fallback system (portal → uiohook → globalShortcut), adds repeat-debounce logic to prevent key-repeat artifacts, extends toggle hotkey to use uiohook/portal in addition to PTT, moves compact-mode UI button to header, and improves documentation around Wayland limitations.

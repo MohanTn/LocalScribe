@@ -136,6 +136,18 @@ If Accessibility is denied on macOS, paste falls back to a visible warning — r
 
 On Linux, LocalScribe prefers `ydotool` on Wayland (no per-paste permission prompt) and `xdotool` on X11, but automatically falls back to whichever tool actually works if the preferred one fails. A common ydotool failure mode: the `ydotoold` daemon isn't running, or your user lacks access to `/dev/uinput` (add yourself to the `input` group, or run `ydotoold` as a service that has that access). If both tools fail or neither is installed, the transcript still lands on your clipboard and LocalScribe tells you to paste manually with Ctrl+V.
 
+## Pause background media while recording
+
+Settings has a **"Pause background media while recording"** toggle (on by default): it mutes system audio output right before a recording starts and restores the exact original mute state the instant recording stops, so a song or video playing in the background doesn't bleed into the transcript. This operates at the OS mixer level rather than targeting individual apps, so it works uniformly for any audio source (a YouTube tab, Spotify, anything) with no dependency on that app exposing a media-control interface — the tradeoff is that muted playback keeps advancing in the background, so a video/song will have skipped ahead by the recording's length once unmuted, rather than resuming from the exact frame it was at.
+
+| Platform | Mechanism                                                                 | Precision                                                                 |
+| -------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Linux    | `wpctl` (PipeWire) → `pactl` (PulseAudio) → `amixer` (ALSA), whichever is found first | Precise — captures the exact original mute state and restores it |
+| Windows  | Simulated `VK_VOLUME_MUTE` key via PowerShell                               | Best-effort blind toggle (same as a hardware mute key), no separate install |
+| macOS    | AppleScript `output muted` of `get volume settings`                        | Precise — captures the exact original mute state and restores it |
+
+No extra install is needed on any platform: `wpctl`/`pactl`/`amixer` ship with virtually every Linux desktop. If none are found, LocalScribe logs a warning once and leaves audio untouched. Disable the setting if it ever misbehaves.
+
 ## Push-to-talk & reliable hotkeys on Wayland (optional native hook)
 
 Electron's `globalShortcut` cannot observe key-*release*, which true hold-to-talk needs. Installing `uiohook-napi` fixes that. It does **not** fix the other Wayland limitation, though: `globalShortcut` grabs keys via X11 (through XWayland on a Wayland session), so it silently never sees native-Wayland windows — e.g. a terminal emulator running as a native Wayland client won't respond to the hotkey while it's focused, even though the hotkey works fine for X11/XWayland windows — and on Linux, `uiohook-napi` uses the same X11 mechanism (`XRecord`) under the hood, so it has the identical blind spot. Without uiohook, PTT degrades to a second toggle shortcut, and the toggle hotkey keeps using `globalShortcut` (fine on X11, flaky on pure Wayland).

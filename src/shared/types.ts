@@ -87,6 +87,8 @@ export interface Settings {
   micDeviceId: string
   /** Force CPU even when a GPU is available. */
   forceCpu: boolean
+  /** Pause background media (YouTube, Spotify, etc.) while recording, resuming on stop. */
+  pauseMediaOnRecord: boolean
   /** Silently check for a new release on startup (see src/main/updater.ts). */
   autoUpdateCheck: boolean
   llm: LlmSettings

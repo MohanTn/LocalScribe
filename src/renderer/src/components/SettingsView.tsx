@@ -368,6 +368,22 @@ export default function SettingsView(): React.JSX.Element {
           />
           Force CPU (disable GPU acceleration)
         </label>
+        <label className="field checkbox">
+          <input
+            type="checkbox"
+            checked={settings.pauseMediaOnRecord}
+            onChange={(e) => void update({ pauseMediaOnRecord: e.target.checked })}
+          />
+          Mute system audio while recording
+        </label>
+        <span className="muted">
+          Mutes system output right before recording starts and restores the original volume when
+          you stop, so background audio (YouTube, Spotify, etc.) doesn&apos;t bleed into the
+          transcript. Works for any audio source since it mutes at the system level rather than
+          any one app, but muted playback keeps advancing in the background, so it&apos;ll have
+          skipped ahead by however long you recorded once unmuted. On Windows this sends the same
+          mute key a hardware button would rather than a precise on/off.
+        </span>
       </section>
 
       <section>
