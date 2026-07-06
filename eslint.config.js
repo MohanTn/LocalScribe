@@ -22,6 +22,18 @@ module.exports = tseslint.config(
     },
   },
   {
+    // Node ESM utility scripts (run directly via `node scripts/...`), not
+    // bundled app code — give them the Node globals they actually have.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+      },
+    },
+  },
+  {
     ignores: ['node_modules/', 'dist/', 'build/', 'out/', 'release/', '*.config.js'],
   }
 );

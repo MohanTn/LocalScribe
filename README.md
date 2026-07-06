@@ -86,7 +86,7 @@ git clone <this-repo> && cd local-scribe
 npm install
 ```
 
-`npm install` triggers the `postinstall` hook (`electron-builder install-app-deps`), which rebuilds `better-sqlite3` (and the optional `uiohook-napi`) against Electron's Node ABI. **You do not need to run `npm rebuild` yourself.**
+`npm install` triggers the `postinstall` hook (`electron-builder install-app-deps`), which rebuilds `better-sqlite3` against Electron's Node ABI; the optional `uiohook-napi` is used as-is from its bundled N-API prebuilds, no compiler or X11 headers required. **You do not need to run `npm rebuild` yourself.**
 
 ### macOS
 

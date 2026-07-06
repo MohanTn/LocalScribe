@@ -24,7 +24,7 @@ Before `npm run dev` will work, the whisper.cpp CLI must be built locally:
 ./scripts/setup-whisper.sh   # clones ggerganov/whisper.cpp into .whisper-cpp/, builds, copies binary to vendor/whisper/
 ```
 
-`npm install` runs `electron-builder install-app-deps` via `postinstall`, which rebuilds native modules (`better-sqlite3`, optional `uiohook-napi`) against Electron's Node ABI — never run `npm rebuild` manually.
+`npm install` runs `electron-builder install-app-deps` via `postinstall`, which rebuilds `better-sqlite3` against Electron's Node ABI — never run `npm rebuild` manually. The postinstall first runs `scripts/alias-uiohook-prebuilds.mjs`: `uiohook-napi` ships N-API prebuilds named `uiohook-napi.node`, which `@electron/rebuild` doesn't recognize (it only looks for `node.napi.node`-style names), so without the alias it would rebuild uiohook from source — exactly what broke CI on runners lacking X11 headers (Linux) or Visual Studio (Windows). The alias makes the rebuild step skip uiohook and use the shipped prebuild.
 
 To point at a custom whisper.cpp build, set `WHISPER_CPP_BIN` rather than editing the binary lookup chain in `src/main/whisper.ts`.
 

@@ -19,7 +19,7 @@
     "build": "npm run typecheck && electron-vite build",
     "start": "electron-vite preview",
     "test": "vitest run",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "node scripts/alias-uiohook-prebuilds.mjs && electron-builder install-app-deps",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
