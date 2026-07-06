@@ -34,9 +34,11 @@
     "ffmpeg-static": "^5.2.0"
   },
   "optionalDependencies": {
-    "dbus-next": "^0.10.2"
+    "dbus-next": "^0.10.2",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.1",
     "@types/react": "^18.3.12",
@@ -52,6 +54,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.62.1",
     "vite": "^7.1.0",
     "vitest": "^4.1.9",
     "zustand": "^5.0.2"

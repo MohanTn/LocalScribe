@@ -12,10 +12,9 @@ module.exports = tseslint.config(
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
       parser: tseslint.parser,
-      parserOptions: {
-        project: './tsconfig.json', // adjust if needed
-        tsconfigRootDir: __dirname,
-      },
+      // No parserOptions.project: only the non-type-aware recommended presets
+      // are enabled, and this repo has no root tsconfig.json (it splits into
+      // tsconfig.node.json / tsconfig.web.json).
     },
     rules: {
       // Optional: override rules from any of the above presets
@@ -23,6 +22,6 @@ module.exports = tseslint.config(
     },
   },
   {
-    ignores: ['node_modules/', 'dist/', 'build/', '*.config.js'],
+    ignores: ['node_modules/', 'dist/', 'build/', 'out/', 'release/', '*.config.js'],
   }
 );
