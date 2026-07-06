@@ -6,6 +6,7 @@ import { convertToWav16k } from './ffmpeg'
 import { addHistory, clearHistory, deleteHistory, searchHistory } from './history'
 import { applyHotkeys, type HotkeyHandlers } from './hotkeys'
 import { getMissingOllamaModel, polish, pullOllamaModel, warmupOllama } from './llm'
+import { pauseMedia, resumeMedia } from './media'
 import { cancelDownload, deleteModel, downloadModel, listModels, modelPath } from './models'
 import { autoPaste } from './paste'
 import {
@@ -273,7 +274,11 @@ export function registerIpc(
   })
 
   // --- Microphone session ---------------------------------------------------
-  handle('audio:start', () => {
+  handle('audio:start', async () => {
+    // Paused before the renderer's mic capture begins (the caller awaits this
+    // handler before calling recorder.start()), so whisper never picks up
+    // bleed-through from whatever was playing in the background.
+    if (getSettings().pauseMediaOnRecord) await pauseMedia()
     startRecording((text) => send('transcribe:partial', text))
     setStatus('recording')
   })
@@ -282,6 +287,10 @@ export function registerIpc(
   ipcMain.on('audio:chunk', (_event, pcm: ArrayBuffer) => appendChunk(pcm))
 
   handle('audio:stop', async (opts: StopOptions) => {
+    // Resume immediately, not after transcription below (which can take a
+    // few seconds) — the user expects the video back the instant they let go
+    // of the hotkey, not once whisper finishes.
+    if (getSettings().pauseMediaOnRecord) void resumeMedia()
     setStatus('processing')
     try {
       const result = await stopRecording()
@@ -314,6 +323,7 @@ export function registerIpc(
   })
 
   handle('audio:abort', () => {
+    if (getSettings().pauseMediaOnRecord) void resumeMedia()
     abortRecording()
     setStatus('idle')
   })

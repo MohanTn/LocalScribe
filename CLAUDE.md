@@ -53,6 +53,12 @@ GPU acceleration is a **compile-time** choice in whisper.cpp (Metal on macOS by 
 
 whisper.cpp / ffmpeg stderr is translated to actionable messages in `friendlyWhisperError()` (`whisper.ts`) and inline in `ffmpeg.ts`'s `close` handler — raw stack traces should never reach the UI. Follow this pattern for new failure modes rather than surfacing raw child-process output.
 
+### Pause-media-on-record
+
+`src/main/media.ts`'s `pauseMedia()`/`resumeMedia()` are called from the `audio:start`/`audio:stop`/`audio:abort` IPC handlers in `ipc.ts` (not from `recording.ts`), because those handlers are the one choke point every recording start/stop passes through regardless of trigger (toggle hotkey, PTT, in-app record button). `pauseMedia()` is awaited *before* `startRecording()` so it resolves before the renderer's `recorder.start()` fires — muting background audio before mic capture begins, not just before whisper runs, is what keeps bleed-through out of the transcript. `resumeMedia()` in `audio:stop` runs immediately, before the `await stopRecording()` transcription pass, so audio comes back the instant the user releases the hotkey rather than after whisper finishes.
+
+This mutes system audio output at the OS mixer level rather than pausing individual apps/players (an earlier per-player design using `playerctl`/MPRIS was scrapped: it silently did nothing for apps that don't expose a media-control interface, which includes most browser tabs — exactly the YouTube-in-browser case this feature exists for). Linux tries `wpctl` (PipeWire) → `pactl` (PulseAudio) → `amixer` (ALSA), whichever is present; macOS reads/writes `output muted` via AppleScript — both capture the exact original mute state and restore it, rather than blindly unmuting a user who'd already muted themselves. Windows has no free way to query or set mute without a Core Audio COM shim, so it sends a blind `VK_VOLUME_MUTE` toggle, the same thing a hardware mute key does — low-risk in practice since nothing else is likely to flip system mute mid-recording. Both `pauseMedia()` and `resumeMedia()` are wrapped in a timeout race so a hung external tool can never block or delay recording start/stop. Muted playback keeps advancing in the background, so a video/song will have skipped ahead by the recording's length once unmuted rather than resuming from the exact frame it was at — an accepted tradeoff for working with any audio source uniformly.
+
 ### Linux sandbox
 
 `build/afterPack.js` does two things to Linux builds after packaging:
