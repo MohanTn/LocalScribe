@@ -24,6 +24,13 @@ global hotkeys and auto-paste.
 - **Hardware acceleration** — whisper.cpp built with Metal (macOS) or CUDA
   (Windows/Linux), automatic CPU fallback (`--no-gpu`).
 
+## Install (prebuilt)
+
+Grab the installer for your platform from the
+[latest release](https://github.com/MohanTn/LocalScribe/releases/latest):
+`.exe` (Windows), `.deb` / `.AppImage` (Linux). No account or toolchain needed.
+Everything below this point is only for building from source.
+
 ## Prerequisites
 
 You need:

@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, net } from 'electron'
 import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from 'fs'
 import { join } from 'path'
 import { Readable } from 'stream'
@@ -64,7 +64,12 @@ export async function downloadModel(
   const partFile = modelPath(id) + '.part'
 
   try {
-    const res = await fetch(`${HF_BASE}/ggml-${id}.bin`, { signal: controller.signal })
+    // Electron's net.fetch (Chromium network stack) rather than Node's global
+    // fetch (undici): undici ignores the OS proxy settings and the system
+    // certificate store, which breaks downloads on Windows machines behind
+    // corporate proxies or antivirus TLS interception even though the rest of
+    // the system has working internet.
+    const res = await net.fetch(`${HF_BASE}/ggml-${id}.bin`, { signal: controller.signal })
     if (!res.ok || !res.body) {
       throw new Error(`Download failed (HTTP ${res.status}). Check your internet connection.`)
     }
@@ -97,11 +102,23 @@ export async function downloadModel(
   } catch (err) {
     rmSync(partFile, { force: true })
     if (isAbort(err)) return false // cancellation is not an error
-    throw err
+    throw friendlyDownloadError(err)
   } finally {
     active.delete(id)
     progress.delete(id)
   }
+}
+
+/**
+ * fetch surfaces network failures as an opaque "fetch failed" TypeError with
+ * the real reason buried in `cause`; unwrap it so the UI shows something
+ * actionable instead. Errors we threw ourselves pass through unchanged.
+ */
+function friendlyDownloadError(err: unknown): Error {
+  if (err instanceof Error && err.message.startsWith('Download failed')) return err
+  const cause = err instanceof Error && err.cause instanceof Error ? ` (${err.cause.message})` : ''
+  const detail = err instanceof Error ? `${err.message}${cause}` : String(err)
+  return new Error(`Model download failed: ${detail}. Check your internet connection, proxy, or firewall settings.`)
 }
 
 function isAbort(err: unknown): boolean {
