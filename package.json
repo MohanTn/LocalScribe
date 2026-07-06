@@ -1,7 +1,7 @@
 {
   "name": "local-scribe",
   "productName": "LocalScribe",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Local, private speech-to-text powered by whisper.cpp — transcribe files or dictate anywhere with global hotkeys.",
   "main": "./out/main/index.js",
   "author": {
