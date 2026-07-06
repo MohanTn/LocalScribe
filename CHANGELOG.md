@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Changed
+
+- This change modernizes the dependency tree by updating npm CLI utilities, removing deprecated packages, and adding a node-gyp version override to ensure consistent native module builds. The lock file changes consolidate many transitive dependencies to newer versions that target modern Node.js environments.
+
 ### Added
 
 - Adds a "Pause background media while recording" feature with platform-specific implementations (Linux: wpctl/pactl/amixer; macOS: AppleScript; Windows: PowerShell mute toggle). Includes comprehensive tests, Settings UI toggle, and integration into the recording start/stop IPC handlers.
