@@ -86,7 +86,7 @@ git clone <this-repo> && cd local-scribe
 npm install
 ```
 
-`npm install` triggers the `postinstall` hook (`electron-builder install-app-deps`), which rebuilds `better-sqlite3` (and the optional `uiohook-napi`) against Electron's Node ABI. **You do not need to run `npm rebuild` yourself.**
+`npm install` triggers the `postinstall` hook (`electron-builder install-app-deps`), which rebuilds `better-sqlite3` against Electron's Node ABI; the optional `uiohook-napi` is used as-is from its bundled N-API prebuilds, no compiler or X11 headers required. **You do not need to run `npm rebuild` yourself.**
 
 ### macOS
 
@@ -155,19 +155,18 @@ Settings has a **"Pause background media while recording"** toggle (on by defaul
 
 No extra install is needed on any platform: `wpctl`/`pactl`/`amixer` ship with virtually every Linux desktop. If none are found, LocalScribe logs a warning once and leaves audio untouched. Disable the setting if it ever misbehaves.
 
-## Push-to-talk & reliable hotkeys on Wayland (optional native hook)
+## Push-to-talk & reliable hotkeys on Wayland (bundled native hook)
 
-Electron's `globalShortcut` cannot observe key-*release*, which true hold-to-talk needs. Installing `uiohook-napi` fixes that. It does **not** fix the other Wayland limitation, though: `globalShortcut` grabs keys via X11 (through XWayland on a Wayland session), so it silently never sees native-Wayland windows — e.g. a terminal emulator running as a native Wayland client won't respond to the hotkey while it's focused, even though the hotkey works fine for X11/XWayland windows — and on Linux, `uiohook-napi` uses the same X11 mechanism (`XRecord`) under the hood, so it has the identical blind spot. Without uiohook, PTT degrades to a second toggle shortcut, and the toggle hotkey keeps using `globalShortcut` (fine on X11, flaky on pure Wayland).
+Electron's `globalShortcut` cannot observe key-*release*, which true hold-to-talk needs. The `uiohook-napi` native hook fixes that, and it ships with the app as an `optionalDependency` (prebuilt binaries for Windows/macOS/Linux), so packaged installers get real hold-to-talk out of the box. It does **not** fix the other Wayland limitation, though: `globalShortcut` grabs keys via X11 (through XWayland on a Wayland session), so it silently never sees native-Wayland windows — e.g. a terminal emulator running as a native Wayland client won't respond to the hotkey while it's focused, even though the hotkey works fine for X11/XWayland windows — and on Linux, `uiohook-napi` uses the same X11 mechanism (`XRecord`) under the hood, so it has the identical blind spot. In the rare case the optional install fails (unsupported platform, `--omit=optional`), PTT degrades gracefully to a second toggle shortcut, and the toggle hotkey keeps using `globalShortcut` (fine on X11, flaky on pure Wayland).
+
+Building from source: `npm install` pulls it in automatically. If your platform has no prebuild, Linux needs the X11 dev headers for it to compile:
 
 ```bash
-# Linux only — X11 dev headers needed for uiohook-napi to compile:
 sudo apt install libx11-dev libxtst-dev libxkbcommon-dev
-
-npm install uiohook-napi
 npm run postinstall      # rebuild native modules against Electron's Node ABI
 ```
 
-Restart the app after installing. On macOS, you'll also be prompted for **Input Monitoring** permission the first time PTT fires.
+On macOS, you'll be prompted for **Input Monitoring** permission the first time PTT fires.
 
 ### GNOME/Wayland: the GlobalShortcuts portal
 

@@ -31,7 +31,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libx11-dev libxtst-dev libxt-dev libxinerama-dev \
-            libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libxkbfile-dev
+            libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libxkbfile-dev \
+            libxrandr-dev
       - run: npm ci
       - run: npm run build
       - run: npm test
@@ -95,7 +96,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libx11-dev libxtst-dev libxt-dev libxinerama-dev \
-            libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libxkbfile-dev
+            libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libxkbfile-dev \
+            libxrandr-dev
       - run: npm ci
       - name: Build whisper.cpp
         shell: bash

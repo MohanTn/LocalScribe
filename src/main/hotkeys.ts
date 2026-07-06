@@ -1,5 +1,6 @@
 import { globalShortcut } from 'electron'
 import { stopPortalHotkeys, tryStartPortalHotkeys } from './hotkeysPortal'
+import { loadUiohookModule } from './uiohookLoader'
 import type { Settings } from '../shared/types'
 
 export interface HotkeyHandlers {
@@ -38,10 +39,25 @@ interface KeyBinding {
   meta: boolean
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type UiohookModule = any
+interface UiohookKeyEvent {
+  keycode: number
+  ctrlKey?: boolean
+  altKey?: boolean
+  shiftKey?: boolean
+  metaKey?: boolean
+}
 
-let uiohook: UiohookModule = undefined
+// The subset of uiohook-napi's surface this file uses.
+interface UiohookModule {
+  UiohookKey: Record<string, number>
+  uIOhook: {
+    on(event: 'keydown' | 'keyup', cb: (e: UiohookKeyEvent) => void): void
+    start(): void
+    stop(): void
+  }
+}
+
+let uiohook: UiohookModule | null | undefined = undefined
 let uiohookListening = false
 let ptt: KeyBinding | null = null
 let pttHeld = false
@@ -65,15 +81,34 @@ let applyEpoch = 0
 // perceptible lag to a genuine release.
 const REPEAT_DEBOUNCE_MS = 70
 
-function loadUiohook(): UiohookModule {
+function loadUiohook(): UiohookModule | null {
   if (uiohook !== undefined) return uiohook
-  try {
-    // Optional native dependency: present only if the user installed it.
-    uiohook = require('uiohook-napi')
-  } catch {
-    uiohook = null
-  }
+  uiohook = loadUiohookModule() as UiohookModule | null
   return uiohook
+}
+
+/**
+ * Binds one hotkey: with uiohook available, parses the combo for the shared
+ * keydown/keyup listener (returned binding); otherwise registers the
+ * press-only globalShortcut fallback and returns null.
+ */
+function bindCombo(
+  combo: string,
+  mod: UiohookModule | null,
+  label: string,
+  fallback: () => void
+): KeyBinding | null {
+  if (mod) {
+    const binding = parseCombo(combo, mod.UiohookKey)
+    if (!binding) console.warn(`Could not parse ${label} hotkey: ${combo}`)
+    return binding
+  }
+  try {
+    globalShortcut.register(combo, fallback)
+  } catch {
+    console.warn(`Invalid ${label} hotkey: ${combo}`)
+  }
+  return null
 }
 
 /** (Re-)binds all global shortcuts from settings. Safe to call repeatedly. */
@@ -89,30 +124,12 @@ export function applyHotkeys(settings: Settings, h: HotkeyHandlers): void {
   const mod = loadUiohook()
 
   if (settings.hotkeyToggle) {
-    if (mod) {
-      toggleBinding = parseCombo(settings.hotkeyToggle, mod.UiohookKey)
-      if (!toggleBinding) console.warn(`Could not parse toggle hotkey: ${settings.hotkeyToggle}`)
-    } else {
-      try {
-        globalShortcut.register(settings.hotkeyToggle, () => handlers?.onToggle())
-      } catch {
-        console.warn(`Invalid toggle hotkey: ${settings.hotkeyToggle}`)
-      }
-    }
+    toggleBinding = bindCombo(settings.hotkeyToggle, mod, 'toggle', () => handlers?.onToggle())
   }
 
   if (settings.hotkeyPtt) {
-    if (mod) {
-      ptt = parseCombo(settings.hotkeyPtt, mod.UiohookKey)
-      if (!ptt) console.warn(`Could not parse PTT hotkey: ${settings.hotkeyPtt}`)
-    } else {
-      // Fallback: hold-to-talk becomes press-to-start / press-to-stop.
-      try {
-        globalShortcut.register(settings.hotkeyPtt, () => handlers?.onToggle())
-      } catch {
-        console.warn(`Invalid PTT hotkey: ${settings.hotkeyPtt}`)
-      }
-    }
+    // Fallback without uiohook: hold-to-talk becomes press-to-start / press-to-stop.
+    ptt = bindCombo(settings.hotkeyPtt, mod, 'PTT', () => handlers?.onToggle())
   }
 
   if (mod && (toggleBinding || ptt)) startUiohook(mod)
@@ -170,8 +187,7 @@ function clearHeldState(): void {
   pttHeld = false
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function matchesBinding(e: any, binding: KeyBinding): boolean {
+function matchesBinding(e: UiohookKeyEvent, binding: KeyBinding): boolean {
   return (
     e.keycode === binding.keycode &&
     !!e.ctrlKey === binding.ctrl &&
@@ -184,8 +200,7 @@ function matchesBinding(e: any, binding: KeyBinding): boolean {
 function startUiohook(mod: UiohookModule): void {
   if (uiohookListening) return
   uiohookListening = true
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mod.uIOhook.on('keydown', (e: any) => {
+  mod.uIOhook.on('keydown', (e) => {
     // Toggle fires once per physical press, guarded the same way PTT guards
     // against repeat keydowns while a key is held. A pending release is
     // cancelled here too: if it fires, this keydown is a repeat artifact for
@@ -209,8 +224,7 @@ function startUiohook(mod: UiohookModule): void {
       }
     }
   })
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mod.uIOhook.on('keyup', (e: any) => {
+  mod.uIOhook.on('keyup', (e) => {
     if (toggleHeld && toggleBinding && e.keycode === toggleBinding.keycode) {
       toggleReleaseTimer = setTimeout(() => {
         toggleHeld = false
