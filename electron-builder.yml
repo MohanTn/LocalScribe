@@ -13,6 +13,10 @@ afterPack: build/afterPack.js
 # Electron's stock icon even if build/icon.png exists.
 icon: build/icon.png
 # Owner/repo are inferred from package.json's "repository" field.
+# releaseType intentionally stays at the default (draft): the Linux and
+# Windows CI jobs upload to the same draft concurrently, and the workflow's
+# publish-release job flips it public once all assets are attached. A draft
+# is never visible to end users, so don't remove that final publish step.
 publish:
   provider: github
 files:

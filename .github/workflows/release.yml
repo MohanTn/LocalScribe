@@ -66,8 +66,9 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   # Builds the whisper.cpp CLI for each OS, packages the installer, and
-  # publishes it to a GitHub Release via electron-builder's built-in GitHub
-  # provider (see electron-builder.yml), using the tag bump-version just cut.
+  # uploads it to a shared *draft* GitHub Release via electron-builder's
+  # built-in GitHub provider (see electron-builder.yml), using the tag
+  # bump-version just cut. publish-release below flips the draft public.
   build-and-release:
     needs: bump-version
     strategy:
@@ -102,3 +103,18 @@ jobs:
       - run: npm run release:${{ matrix.target }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # electron-builder uploads assets to a draft release (invisible to anyone
+  # without write access to the repo). Publish it only after every platform's
+  # installer is attached, so the public release is never half-populated and
+  # the .deb/.exe/.AppImage are downloadable by everybody without logging in.
+  publish-release:
+    needs: [bump-version, build-and-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # flip the draft release to published
+    steps:
+      - name: Publish the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ needs.bump-version.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --draft=false --latest
