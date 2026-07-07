@@ -65,6 +65,8 @@ let pttReleaseTimer: NodeJS.Timeout | null = null
 let toggleBinding: KeyBinding | null = null
 let toggleHeld = false
 let toggleReleaseTimer: NodeJS.Timeout | null = null
+let toggleFallback: FallbackDebouncer | null = null
+let pttFallback: FallbackDebouncer | null = null
 let handlers: HotkeyHandlers | null = null
 // Bumped on every applyHotkeys call so a slow, superseded portal-bind
 // attempt (see below) can tell it's stale once it resolves and back off
@@ -80,6 +82,54 @@ let applyEpoch = 0
 // back down first — absorbs those repeat artifacts while adding no
 // perceptible lag to a genuine release.
 const REPEAT_DEBOUNCE_MS = 70
+
+// Without uiohook, both hotkeys fall back to Electron's globalShortcut,
+// which on Windows is backed by RegisterHotKey. Electron registers it
+// without MOD_NOREPEAT, so Windows' OS-level key-repeat keeps re-firing the
+// accelerator for as long as the combo is physically held (there's no
+// release event to tell us otherwise) — read literally, that's a storm of
+// presses instead of one, which turns "hold to talk" into recording
+// flickering on/off for as long as the key is down. A held key's repeats
+// are always faster than the OS's own repeat-delay setting, and Windows'
+// maximum configurable initial repeat delay is 1000 ms (SPI_GETKEYBOARDDELAY
+// tops out at that), so any cooldown comfortably above that reliably tells
+// "still the same physical hold" apart from "a deliberate new press" without
+// needing to query the OS setting.
+const FALLBACK_REPEAT_COOLDOWN_MS = 1200
+
+interface FallbackDebouncer {
+  /** Call on every accelerator invocation; only the first in a burst runs `fn`. */
+  pulse: () => void
+  clear: () => void
+}
+
+/**
+ * Wraps a globalShortcut fallback callback so repeated invocations caused by
+ * OS auto-repeat (arriving well within FALLBACK_REPEAT_COOLDOWN_MS of the
+ * previous one) collapse into a single call, while an invocation that arrives
+ * after the cooldown — a genuinely new press — still fires normally.
+ */
+function makeFallbackDebouncer(fn: () => void): FallbackDebouncer {
+  let cooldownTimer: NodeJS.Timeout | null = null
+  return {
+    pulse: () => {
+      if (cooldownTimer) {
+        clearTimeout(cooldownTimer)
+      } else {
+        fn()
+      }
+      cooldownTimer = setTimeout(() => {
+        cooldownTimer = null
+      }, FALLBACK_REPEAT_COOLDOWN_MS)
+    },
+    clear: () => {
+      if (cooldownTimer) {
+        clearTimeout(cooldownTimer)
+        cooldownTimer = null
+      }
+    }
+  }
+}
 
 function loadUiohook(): UiohookModule | null {
   if (uiohook !== undefined) return uiohook
@@ -120,16 +170,22 @@ export function applyHotkeys(settings: Settings, h: HotkeyHandlers): void {
   clearHeldState()
   ptt = null
   toggleBinding = null
+  toggleFallback = null
+  pttFallback = null
 
   const mod = loadUiohook()
 
   if (settings.hotkeyToggle) {
-    toggleBinding = bindCombo(settings.hotkeyToggle, mod, 'toggle', () => handlers?.onToggle())
+    toggleFallback = makeFallbackDebouncer(() => handlers?.onToggle())
+    toggleBinding = bindCombo(settings.hotkeyToggle, mod, 'toggle', () => toggleFallback?.pulse())
   }
 
   if (settings.hotkeyPtt) {
-    // Fallback without uiohook: hold-to-talk becomes press-to-start / press-to-stop.
-    ptt = bindCombo(settings.hotkeyPtt, mod, 'PTT', () => handlers?.onToggle())
+    // Fallback without uiohook: hold-to-talk becomes press-to-start / press-to-stop,
+    // debounced against OS auto-repeat so holding it down fires onToggle once,
+    // not on every repeat.
+    pttFallback = makeFallbackDebouncer(() => handlers?.onToggle())
+    ptt = bindCombo(settings.hotkeyPtt, mod, 'PTT', () => pttFallback?.pulse())
   }
 
   if (mod && (toggleBinding || ptt)) startUiohook(mod)
@@ -185,6 +241,8 @@ function clearHeldState(): void {
   }
   toggleHeld = false
   pttHeld = false
+  toggleFallback?.clear()
+  pttFallback?.clear()
 }
 
 function matchesBinding(e: UiohookKeyEvent, binding: KeyBinding): boolean {

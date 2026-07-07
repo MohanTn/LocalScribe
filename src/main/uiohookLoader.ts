@@ -11,7 +11,12 @@ export function loadUiohookModule(): unknown {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('uiohook-napi')
-  } catch {
+  } catch (err) {
+    // Logged (not silent) because a missing/failed native module here is
+    // exactly what degrades push-to-talk from a real hold to a second
+    // toggle shortcut — this is the first thing to check when a user
+    // reports that behavior.
+    console.warn('uiohook-napi unavailable, hotkeys will use the globalShortcut fallback:', err)
     return null
   }
 }
