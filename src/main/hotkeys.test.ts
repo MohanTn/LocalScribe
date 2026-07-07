@@ -127,4 +127,46 @@ describe('push-to-talk hotkey', () => {
     expect(handlers.onToggle).toHaveBeenCalledTimes(1)
     expect(handlers.onPttDown).not.toHaveBeenCalled()
   })
+
+  it('collapses Windows OS key-repeat storms on the PTT fallback into a single toggle', async () => {
+    // The reported bug: without uiohook, Windows' globalShortcut/RegisterHotKey
+    // re-fires the accelerator at the OS repeat rate for as long as the combo
+    // is held (no MOD_NOREPEAT), which used to retoggle recording on/off
+    // repeatedly instead of firing once per physical press.
+    uiohookAvailable = false
+    vi.resetModules()
+    hotkeys = await import('./hotkeys')
+
+    hotkeys.applyHotkeys(settings, handlers)
+    const pttCallback = registerMock.mock.calls.find(([accel]) => accel === 'F9')![1] as () => void
+
+    // Simulate the OS repeating the held key well within the repeat-delay window.
+    for (let i = 0; i < 10; i++) {
+      pttCallback()
+      vi.advanceTimersByTime(50)
+    }
+    expect(handlers.onToggle).toHaveBeenCalledTimes(1)
+
+    // Key genuinely released and re-pressed later: fires again.
+    vi.advanceTimersByTime(1300)
+    pttCallback()
+    expect(handlers.onToggle).toHaveBeenCalledTimes(2)
+  })
+
+  it('collapses Windows OS key-repeat storms on the toggle fallback into a single toggle', async () => {
+    uiohookAvailable = false
+    vi.resetModules()
+    hotkeys = await import('./hotkeys')
+
+    hotkeys.applyHotkeys(settings, handlers)
+    const toggleCallback = registerMock.mock.calls.find(
+      ([accel]) => accel === 'Ctrl+Shift+Space'
+    )![1] as () => void
+
+    for (let i = 0; i < 10; i++) {
+      toggleCallback()
+      vi.advanceTimersByTime(50)
+    }
+    expect(handlers.onToggle).toHaveBeenCalledTimes(1)
+  })
 })
