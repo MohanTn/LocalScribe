@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { listMicrophones } from '../lib/recorder'
 import { useStore } from '../store'
-import type { BenchmarkResult, Settings, UpdateStatus, VocabularyEntry } from '../../../shared/api'
+import type { BenchmarkResult, Settings, UpdateStatus } from '../../../shared/api'
 
 // ---- Hotkey capture ---------------------------------------------------------
 
@@ -121,10 +121,26 @@ export default function SettingsView(): React.JSX.Element {
     [setModels]
   )
 
-  const updateVocabulary = useCallback(
-    (next: VocabularyEntry[]) => void update({ vocabulary: next }),
-    [update]
-  )
+  // Local copy so typing (which includes transient states like a trailing
+  // comma) isn't fought by the settings round-trip on every keystroke; only
+  // resynced from settings while the field isn't focused, so it still picks
+  // up the value once the async settings load completes.
+  const [vocabText, setVocabText] = useState(() => settings?.vocabulary.join(', ') ?? '')
+  const vocabFocused = useRef(false)
+
+  useEffect(() => {
+    if (!vocabFocused.current) setVocabText(settings?.vocabulary.join(', ') ?? '')
+  }, [settings?.vocabulary])
+
+  const commitVocabulary = useCallback(() => {
+    vocabFocused.current = false
+    const terms = vocabText
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+    setVocabText(terms.join(', '))
+    void update({ vocabulary: terms })
+  }, [vocabText, update])
 
   const runBenchmark = useCallback(async () => {
     setBenchmarkResults(null)
@@ -389,44 +405,22 @@ export default function SettingsView(): React.JSX.Element {
       <section>
         <h2>Vocabulary</h2>
         <p className="muted">
-          Correct words whisper consistently mishears or misspells, e.g. spoken "lama 3.1" replaced with
-          "Llama 3.1" in every transcript. Matching is case-insensitive and whole-word. The right-hand
-          terms are also fed back into whisper as a hint before transcribing, so it's more likely to get
-          them right in the first place.
+          Correct spellings of words whisper tends to mishear or misspell, e.g. brand names, jargon, or
+          acronyms like "Ollama" or "whisper.cpp". Comma-separated. These are fed to whisper as a hint
+          before transcribing, and anything in the transcript that sounds close but doesn't match
+          exactly gets fuzzy-corrected to the spelling you enter here.
         </p>
-        <ul className="model-list">
-          {settings.vocabulary.map((entry, i) => (
-            <li key={i} className="model-item vocab-item">
-              <input
-                type="text"
-                placeholder="Whisper says…"
-                value={entry.from}
-                onChange={(e) =>
-                  updateVocabulary(
-                    settings.vocabulary.map((v, j) => (j === i ? { ...v, from: e.target.value } : v))
-                  )
-                }
-              />
-              <span className="muted">&rarr;</span>
-              <input
-                type="text"
-                placeholder="Replace with…"
-                value={entry.to}
-                onChange={(e) =>
-                  updateVocabulary(
-                    settings.vocabulary.map((v, j) => (j === i ? { ...v, to: e.target.value } : v))
-                  )
-                }
-              />
-              <button className="danger" onClick={() => updateVocabulary(settings.vocabulary.filter((_, j) => j !== i))}>
-                Delete
-              </button>
-            </li>
-          ))}
-        </ul>
-        <button onClick={() => updateVocabulary([...settings.vocabulary, { from: '', to: '' }])}>
-          Add word
-        </button>
+        <textarea
+          className="vocab-textarea"
+          rows={3}
+          placeholder="Ollama, whisper.cpp, LocalScribe"
+          value={vocabText}
+          onFocus={() => {
+            vocabFocused.current = true
+          }}
+          onChange={(e) => setVocabText(e.target.value)}
+          onBlur={commitVocabulary}
+        />
       </section>
 
       <section>

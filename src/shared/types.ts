@@ -65,15 +65,6 @@ export interface LlmSettings {
   autoPolish: boolean
 }
 
-/** A user-defined correction applied to transcripts after whisper.cpp runs,
- *  e.g. { from: "lama 3.1", to: "Llama 3.1" } for terms whisper mishears or
- *  mis-spells (brand names, jargon, acronyms). Matching is case-insensitive
- *  and whole-word/phrase. */
-export interface VocabularyEntry {
-  from: string
-  to: string
-}
-
 export interface Settings {
   /** whisper model id, e.g. "base" or "large-v3-turbo" */
   model: string
@@ -92,7 +83,11 @@ export interface Settings {
   /** Silently check for a new release on startup (see src/main/updater.ts). */
   autoUpdateCheck: boolean
   llm: LlmSettings
-  vocabulary: VocabularyEntry[]
+  /** Correct spellings of terms whisper.cpp tends to mishear (brand names,
+   *  jargon, acronyms), e.g. "Ollama", "whisper.cpp". Fed to whisper as a
+   *  decoding hint and used to fuzzy-correct near-misses after the fact —
+   *  see src/main/vocabulary.ts. */
+  vocabulary: string[]
 }
 
 /**

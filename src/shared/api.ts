@@ -7,8 +7,7 @@ import type {
   Settings,
   StopOptions,
   TranscriptionResult,
-  UpdateStatus,
-  VocabularyEntry
+  UpdateStatus
 } from './types'
 
 // The contract between preload (implementation) and renderer (consumer).
@@ -109,7 +108,6 @@ export type {
   Settings,
   StopOptions,
   TranscriptionResult,
-  UpdateStatus,
-  VocabularyEntry
+  UpdateStatus
 }
 export type { Segment, Word } from './types'
