@@ -90,6 +90,19 @@ function createWindow(): void {
     }
   })
 
+  // The OS minimize button used to leave a separate in-app compact-mode
+  // button fighting for the same top-right corner as the native window
+  // controls. Redirecting minimize itself into compact mode removes that
+  // button (and the overlap) entirely, on every platform. Unlike 'close',
+  // Electron's 'minimize' event isn't cancelable (its listener takes no
+  // event argument at all), so there's no preventDefault() to reach for —
+  // the window briefly minimizes, then this immediately restores it and
+  // switches to the mini widget instead.
+  mainWindow.on('minimize', () => {
+    mainWindow?.restore()
+    enterMiniMode()
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url) // external links go to the OS browser
     return { action: 'deny' }
@@ -175,7 +188,6 @@ if (!app.requestSingleInstanceLock()) {
     initHistory()
     createWindow()
     registerIpc(() => mainWindow, hotkeyHandlers, {
-      enterMini: enterMiniMode,
       exitMini: exitMiniMode
     })
     createTray({
@@ -204,7 +216,7 @@ if (!app.requestSingleInstanceLock()) {
     initUpdater((s) => mainWindow?.webContents.send('update:status', s))
     // Best-effort: a failed startup check just leaves the Settings page's
     // manual "Check for updates" button as the way to retry.
-    if (getSettings().autoUpdateCheck) void checkForUpdates().catch(() => undefined)
+    if (getSettings().autoUpdateCheck) checkForUpdates().catch(() => undefined)
 
     app.on('activate', () => {
       // macOS dock click with the window hidden.
