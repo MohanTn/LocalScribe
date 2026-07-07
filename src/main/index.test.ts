@@ -10,6 +10,7 @@ interface WindowMock {
   hide: ReturnType<typeof vi.fn>
   focus: ReturnType<typeof vi.fn>
   restore: ReturnType<typeof vi.fn>
+  isMinimized: ReturnType<typeof vi.fn>
   isVisible: ReturnType<typeof vi.fn>
   isDestroyed: ReturnType<typeof vi.fn>
   setPosition: ReturnType<typeof vi.fn>
@@ -29,6 +30,7 @@ function createWindowMock(): WindowMock {
     hide: vi.fn(),
     focus: vi.fn(),
     restore: vi.fn(),
+    isMinimized: vi.fn(() => false),
     isVisible: vi.fn(() => false),
     isDestroyed: vi.fn(() => false),
     setPosition: vi.fn(),
@@ -141,5 +143,29 @@ describe('minimize redirects to compact mode', () => {
 
     const miniWin = browserWindowMock.mock.results[1].value as WindowMock
     expect(miniWin.show).toHaveBeenCalled()
+  })
+
+  it('restores a still-minimized main window when exiting mini mode', async () => {
+    await import('./index')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const mainWin = browserWindowMock.mock.results[0].value as WindowMock
+    mainWin.handlers['minimize']() // enter mini mode
+
+    // Simulate the Linux race: the WM ignored the in-handler restore(), so
+    // the hidden window is still flagged minimized when the user expands.
+    mainWin.restore.mockClear()
+    mainWin.show.mockClear()
+    mainWin.isMinimized.mockReturnValue(true)
+
+    const { registerIpc } = await import('./ipc')
+    // The mocked registerIpc accumulates calls across vi.resetModules() runs;
+    // the last call is the one from this test's module instance.
+    const windowActions = vi.mocked(registerIpc).mock.lastCall?.[2] as { exitMini: () => void }
+    windowActions.exitMini()
+
+    expect(mainWin.restore).toHaveBeenCalled()
+    expect(mainWin.show).toHaveBeenCalled()
   })
 })

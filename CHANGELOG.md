@@ -13,5 +13,6 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Fixed
 
+- Added an explicit `isMinimized()` check in `showWindow()` to guard the minimize state before showing the main window, preventing the window from remaining iconified after exiting mini mode on Linux. Includes a test verifying the race condition scenario.
 - Implements debouncing for Windows' RegisterHotKey key-repeat storms in the globalShortcut fallback path, preventing recording from flickering on/off when holding a hotkey. Both toggle and PTT hotkeys now collapse OS-level repeats within 1200ms (above Windows' max repeat delay) into a single logical press, with improved diagnostics for the fallback path.
 - Push-to-talk holding down the key on Windows could rapid-fire recording on/off ("streaming of presses") instead of a clean hold whenever the app fell back to `globalShortcut` (uiohook-napi unavailable): Windows' `RegisterHotKey` re-fires the accelerator at the OS key-repeat rate for as long as a key is held, and nothing was collapsing those repeats into a single logical press. Both the toggle and PTT `globalShortcut` fallbacks are now debounced against this. Also added logging for why `uiohook-napi` failed to load, to make this fallback path easier to diagnose.
