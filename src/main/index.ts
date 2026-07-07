@@ -118,6 +118,13 @@ function createWindow(): void {
 function showWindow(view?: string): void {
   if (!mainWindow) return
   if (miniWindow?.isVisible()) miniWindow.hide()
+  // The restore() in the 'minimize' handler races the WM's in-flight
+  // minimize on Linux (and Wayland can't programmatically un-minimize at
+  // all), so the window can be hidden with its minimized state still set —
+  // then show() alone re-maps it still iconified, unrecoverable from the
+  // mini widget, tray, or a second launch. Clear it here, at the one choke
+  // point every restore path funnels through.
+  if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
   if (view) mainWindow.webContents.send('navigate', view)
