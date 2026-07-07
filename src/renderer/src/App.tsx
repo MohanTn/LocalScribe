@@ -28,6 +28,20 @@ export default function App(): React.JSX.Element {
   const busyRef = useRef(false) // guards start/stop races
   const viaHotkeyRef = useRef(false)
   const lastLevelAt = useRef(0)
+  const mainRef = useRef<HTMLElement | null>(null)
+  const scrollIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Reveals the (otherwise transparent) scrollbar thumb while actively
+  // scrolling, then fades it back out ~1s after the last scroll — the
+  // overlay-scrollbar feel .main:hover alone can't produce, since CSS has
+  // no way to detect "recently scrolled" on its own.
+  const handleMainScroll = useCallback(() => {
+    const el = mainRef.current
+    if (!el) return
+    el.classList.add('is-scrolling')
+    if (scrollIdleTimer.current) clearTimeout(scrollIdleTimer.current)
+    scrollIdleTimer.current = setTimeout(() => el.classList.remove('is-scrolling'), 1000)
+  }, [])
 
   const startRecording = useCallback(async (viaHotkey: boolean) => {
     const s = useStore.getState()
@@ -144,7 +158,6 @@ export default function App(): React.JSX.Element {
       if (!window.api) {
         if (++attempts >= MAX_ATTEMPTS) {
           // Surface to the user — without IPC the app is largely dead.
-          // eslint-disable-next-line no-console
           console.warn('[LocalScribe] preload bridge never appeared; IPC inactive.')
           useStore.getState().notify('Preload bridge never loaded — please restart the app.')
           return
@@ -155,23 +168,21 @@ export default function App(): React.JSX.Element {
       const s = useStore.getState()
       // Forward main-process errors to the user instead of swallowing them;
       // also log to console so developers see the stack in DevTools.
-      void window.api.settings.get().then(s.setSettings).catch((err) => {
-        // eslint-disable-next-line no-console
+      window.api.settings.get().then(s.setSettings).catch((err) => {
         console.error('[LocalScribe] settings:get failed:', err)
         s.notify(err instanceof Error ? err.message : String(err))
       })
-      void window.api.models.list().then(s.setModels).catch((err) => {
-        // eslint-disable-next-line no-console
+      window.api.models.list().then(s.setModels).catch((err) => {
         console.error('[LocalScribe] models:list failed:', err)
         s.notify(err instanceof Error ? err.message : String(err))
       })
       // Best-effort: the version badge just stays blank if this fails.
-      void window.api.appVersion().then(s.setVersion).catch(() => undefined)
+      window.api.appVersion().then(s.setVersion).catch(() => undefined)
       // Best-effort: no Ollama/model configured is a normal, silent no-op here.
-      void window.api.checkOllamaModel().then(s.setOllamaMissingModel).catch(() => undefined)
+      window.api.checkOllamaModel().then(s.setOllamaMissingModel).catch(() => undefined)
       // Pulls the current state instead of relying only on the 'update:status'
       // push, which can fire (and even finish) before this listener attaches.
-      void window.api.update.status().then(s.setUpdateStatus).catch(() => undefined)
+      window.api.update.status().then(s.setUpdateStatus).catch(() => undefined)
 
       unsubFns = [
         window.api.on('status', (status) => useStore.getState().setStatus(status as AppStatus)),
@@ -206,15 +217,8 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="app">
-      <button
-        className="compact-mode-btn"
-        onClick={() => void window.api.window.enterMini()}
-        title="Compact mode: small always-on-top widget"
-      >
-        ⤢
-      </button>
       <Sidebar />
-      <main className="main">
+      <main className="main" ref={mainRef} onScroll={handleMainScroll}>
         <div className="notice-stack">
           {notice && (
             <div className="notice" role="alert">

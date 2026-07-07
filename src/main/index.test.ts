@@ -1,22 +1,67 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const appendSwitchMock = vi.fn()
+const requestSingleInstanceLockMock = vi.fn(() => false)
+const whenReadyMock = vi.fn(() => new Promise(() => {}))
 
-// `requestSingleInstanceLock` always denies the lock so the rest of the
-// startup chain (window/tray/hotkey/history bootstrap) never runs — this
-// test only cares about the platform-gated sandbox switch at the top of the
-// module, not the full app lifecycle.
+interface WindowMock {
+  on: ReturnType<typeof vi.fn>
+  show: ReturnType<typeof vi.fn>
+  hide: ReturnType<typeof vi.fn>
+  focus: ReturnType<typeof vi.fn>
+  restore: ReturnType<typeof vi.fn>
+  isVisible: ReturnType<typeof vi.fn>
+  isDestroyed: ReturnType<typeof vi.fn>
+  setPosition: ReturnType<typeof vi.fn>
+  loadURL: ReturnType<typeof vi.fn>
+  loadFile: ReturnType<typeof vi.fn>
+  webContents: { setWindowOpenHandler: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn> }
+  handlers: Record<string, (...args: never[]) => void>
+}
+
+function createWindowMock(): WindowMock {
+  const handlers: Record<string, (...args: never[]) => void> = {}
+  return {
+    on: vi.fn((event: string, cb: (...args: never[]) => void) => {
+      handlers[event] = cb
+    }),
+    show: vi.fn(),
+    hide: vi.fn(),
+    focus: vi.fn(),
+    restore: vi.fn(),
+    isVisible: vi.fn(() => false),
+    isDestroyed: vi.fn(() => false),
+    setPosition: vi.fn(),
+    loadURL: vi.fn(),
+    loadFile: vi.fn(),
+    webContents: { setWindowOpenHandler: vi.fn(), send: vi.fn() },
+    handlers
+  }
+}
+
+// Must be a real function (not an arrow function) so `new BrowserWindow(...)`
+// in index.ts's constructor-style usage picks up its returned object.
+const browserWindowMock = vi.fn(function BrowserWindowCtor() {
+  return createWindowMock()
+}) as unknown as ReturnType<typeof vi.fn> & { getAllWindows: ReturnType<typeof vi.fn> }
+browserWindowMock.getAllWindows = vi.fn(() => [])
+
+// `requestSingleInstanceLock` denies the lock by default so the rest of the
+// startup chain (window/tray/hotkey/history bootstrap) never runs for the
+// sandbox-switch tests below; the minimize-redirect test overrides it to
+// actually exercise window creation.
 vi.mock('electron', () => ({
   app: {
     commandLine: { appendSwitch: appendSwitchMock },
-    requestSingleInstanceLock: vi.fn(() => false),
+    requestSingleInstanceLock: requestSingleInstanceLockMock,
     quit: vi.fn(),
     on: vi.fn(),
-    whenReady: vi.fn(() => new Promise(() => {})),
+    whenReady: whenReadyMock,
     exit: vi.fn(),
     getVersion: vi.fn()
   },
-  BrowserWindow: vi.fn(),
+  BrowserWindow: browserWindowMock,
+  screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } })) },
   shell: { openExternal: vi.fn() }
 }))
 
@@ -24,9 +69,12 @@ vi.mock('./history', () => ({ initHistory: vi.fn() }))
 vi.mock('./hotkeys', () => ({ applyHotkeys: vi.fn(), unregisterHotkeys: vi.fn() }))
 vi.mock('./ipc', () => ({ registerIpc: vi.fn() }))
 vi.mock('./llm', () => ({ warmupOllama: vi.fn() }))
+vi.mock('./models', () => ({ modelPath: vi.fn(() => '/fake/model.bin') }))
 vi.mock('./settings', () => ({ getSettings: vi.fn(() => ({})) }))
 vi.mock('./status', () => ({ onStatus: vi.fn() }))
 vi.mock('./tray', () => ({ createTray: vi.fn() }))
+vi.mock('./updater', () => ({ initUpdater: vi.fn(), checkForUpdates: vi.fn(() => Promise.resolve()) }))
+vi.mock('./whisper-server', () => ({ ensureServer: vi.fn(() => Promise.resolve()), stopServer: vi.fn() }))
 
 function setPlatform(platform: string): void {
   Object.defineProperty(process, 'platform', { value: platform, configurable: true })
@@ -61,5 +109,37 @@ describe('Linux sandbox switches', () => {
     setPlatform('win32')
     await import('./index')
     expect(appendSwitchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('minimize redirects to compact mode', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    browserWindowMock.mockClear()
+    requestSingleInstanceLockMock.mockReturnValue(true)
+    whenReadyMock.mockImplementation(() => Promise.resolve())
+  })
+
+  afterEach(() => {
+    requestSingleInstanceLockMock.mockReturnValue(false)
+    whenReadyMock.mockImplementation(() => new Promise(() => {}))
+  })
+
+  it('restores from the native minimize and shows the mini widget instead, on every platform', async () => {
+    await import('./index')
+    // Flush the app.whenReady().then(...) microtask so createWindow() runs.
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const mainWin = browserWindowMock.mock.results[0].value as WindowMock
+    expect(mainWin.on).toHaveBeenCalledWith('minimize', expect.any(Function))
+
+    mainWin.handlers['minimize']()
+
+    expect(mainWin.restore).toHaveBeenCalled()
+    expect(mainWin.hide).toHaveBeenCalled()
+
+    const miniWin = browserWindowMock.mock.results[1].value as WindowMock
+    expect(miniWin.show).toHaveBeenCalled()
   })
 })

@@ -85,8 +85,6 @@ export interface LocalScribeApi {
   /** Subscribes to a main->renderer event. Returns an unsubscribe function. */
   on: (channel: ReceiveChannel, cb: (...args: unknown[]) => void) => () => void
   window: {
-    /** Hides the main window and shows the small always-on-top mini widget. */
-    enterMini: () => Promise<void>
     /** Hides the mini widget and restores the main window as it was. */
     exitMini: () => Promise<void>
     /** Same effect as the toggle hotkey, but never auto-pastes on completion —

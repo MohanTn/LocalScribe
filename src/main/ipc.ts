@@ -72,7 +72,6 @@ function generateBenchWav(durationSec: number): string {
 }
 
 export interface WindowActions {
-  enterMini: () => void
   exitMini: () => void
 }
 
@@ -343,7 +342,8 @@ export function registerIpc(
   handle('clipboard:copy', (text: string) => clipboard.writeText(text))
 
   // --- Mini widget (compact mode) --------------------------------------------
-  handle('window:enterMini', () => windowActions.enterMini())
+  // Entering compact mode happens via the main window's native minimize
+  // button (see src/main/index.ts), not an IPC call from the renderer.
   handle('window:exitMini', () => windowActions.exitMini())
   // Deliberately distinct from hotkeyHandlers.onToggle (which always sends
   // viaHotkey: true and can trigger auto-paste): the mini widget is a manual

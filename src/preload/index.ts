@@ -72,7 +72,6 @@ const api: LocalScribeApi = {
   },
   pathForFile: (file) => webUtils.getPathForFile(file),
   window: {
-    enterMini: () => invoke('window:enterMini'),
     exitMini: () => invoke('window:exitMini'),
     toggleRecording: () => invoke('window:toggleRecording')
   },
