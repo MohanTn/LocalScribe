@@ -568,9 +568,11 @@ textarea {
   align-items: center;
   gap: 10px;
 }
-.vocab-item input {
-  flex: 1;
-  min-width: 0;
+.vocab-textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: inherit;
 }
 progress {
   width: 140px;
