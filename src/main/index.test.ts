@@ -6,6 +6,7 @@ const whenReadyMock = vi.fn(() => new Promise(() => {}))
 
 interface WindowMock {
   on: ReturnType<typeof vi.fn>
+  once: ReturnType<typeof vi.fn>
   show: ReturnType<typeof vi.fn>
   hide: ReturnType<typeof vi.fn>
   focus: ReturnType<typeof vi.fn>
@@ -18,13 +19,18 @@ interface WindowMock {
   loadFile: ReturnType<typeof vi.fn>
   webContents: { setWindowOpenHandler: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn> }
   handlers: Record<string, (...args: never[]) => void>
+  onceHandlers: Record<string, (...args: never[]) => void>
 }
 
 function createWindowMock(): WindowMock {
   const handlers: Record<string, (...args: never[]) => void> = {}
+  const onceHandlers: Record<string, (...args: never[]) => void> = {}
   return {
     on: vi.fn((event: string, cb: (...args: never[]) => void) => {
       handlers[event] = cb
+    }),
+    once: vi.fn((event: string, cb: (...args: never[]) => void) => {
+      onceHandlers[event] = cb
     }),
     show: vi.fn(),
     hide: vi.fn(),
@@ -37,7 +43,8 @@ function createWindowMock(): WindowMock {
     loadURL: vi.fn(),
     loadFile: vi.fn(),
     webContents: { setWindowOpenHandler: vi.fn(), send: vi.fn() },
-    handlers
+    handlers,
+    onceHandlers
   }
 }
 
@@ -138,11 +145,55 @@ describe('minimize redirects to compact mode', () => {
 
     mainWin.handlers['minimize']()
 
-    expect(mainWin.restore).toHaveBeenCalled()
+    // Not minimized (mock default), so the main window hides immediately and
+    // no restore()/'restore' wait is needed on this common path.
     expect(mainWin.hide).toHaveBeenCalled()
+    expect(mainWin.restore).not.toHaveBeenCalled()
 
     const miniWin = browserWindowMock.mock.results[1].value as WindowMock
     expect(miniWin.show).toHaveBeenCalled()
+  })
+
+  it('defers hiding a still-minimized main window until the restore lands', async () => {
+    await import('./index')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const mainWin = browserWindowMock.mock.results[0].value as WindowMock
+    // The WM's minimize is still in flight when the handler fires.
+    mainWin.isMinimized.mockReturnValue(true)
+
+    mainWin.handlers['minimize']()
+
+    // hide() must NOT run while the window is still iconified — that's the bug
+    // that left it un-restorable on Wayland. We restore() and wait instead.
+    expect(mainWin.restore).toHaveBeenCalled()
+    expect(mainWin.hide).not.toHaveBeenCalled()
+
+    // Once the un-minimize actually lands, the deferred hide runs.
+    mainWin.onceHandlers['restore']()
+    expect(mainWin.hide).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to hiding after a timeout if no restore event fires', async () => {
+    vi.useFakeTimers()
+    try {
+      await import('./index')
+      await Promise.resolve()
+      await Promise.resolve()
+
+      const mainWin = browserWindowMock.mock.results[0].value as WindowMock
+      mainWin.isMinimized.mockReturnValue(true)
+
+      mainWin.handlers['minimize']()
+      expect(mainWin.hide).not.toHaveBeenCalled()
+
+      // WM never emits 'restore'; the fallback timer still engages mini mode.
+      vi.advanceTimersByTime(400)
+      expect(mainWin.hide).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('restores a still-minimized main window when exiting mini mode', async () => {
