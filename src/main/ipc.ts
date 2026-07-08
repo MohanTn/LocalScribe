@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { basename, join } from 'path'
 import { convertToWav16k } from './ffmpeg'
+import { extractContextTerms } from './clipboardContext'
 import { addHistory, clearHistory, deleteHistory, searchHistory } from './history'
 import { applyHotkeys, type HotkeyHandlers } from './hotkeys'
 import { getMissingOllamaModel, polish, pullOllamaModel, warmupOllama } from './llm'
@@ -21,7 +22,7 @@ import { getSettings, updateSettings } from './settings'
 import { getStatus, setStatus } from './status'
 import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
 import { applyVocabulary, buildInitialPrompt } from './vocabulary'
-import { detectGpu, transcribeWav, whisperBinary } from './whisper'
+import { detectGpu, listGpus, transcribeWav, whisperBinary } from './whisper'
 import { ensureServer } from './whisper-server'
 import type { BenchmarkResult, Settings, StopOptions, TranscriptionResult } from '../shared/types'
 
@@ -117,7 +118,7 @@ export function registerIpc(
       // If this model matches the current setting, start the resident server.
       const s = getSettings()
       if (s.model === id) {
-        ensureServer(modelPath(id), s.forceCpu).catch((err) =>
+        ensureServer(modelPath(id), s.forceCpu, s.gpuDevice).catch((err) =>
           console.warn('whisper-server start after download failed:', err)
         )
       }
@@ -146,6 +147,7 @@ export function registerIpc(
           await transcribeWav(testWav, modelPath(m.id), {
             language: 'en', // skip language detection on the synthetic test clip
             forceCpu: settings.forceCpu,
+            gpuDevice: settings.gpuDevice,
             forceCli: true // bypass whisper-server for apples-to-apples cold-start timing
           })
           const elapsed = Date.now() - t0
@@ -186,9 +188,9 @@ export function registerIpc(
       warmupOllama(next.llm) // pick up a newly configured Ollama model right away
       notifyIfOllamaModelMissing(next.llm)
     }
-    // Hot-swap the resident whisper-server when the model or GPU toggle changes.
-    if (patch.model !== undefined || patch.forceCpu !== undefined) {
-      ensureServer(modelPath(next.model), next.forceCpu).catch((err) =>
+    // Hot-swap the resident whisper-server when the model or GPU settings change.
+    if (patch.model !== undefined || patch.forceCpu !== undefined || patch.gpuDevice !== undefined) {
+      ensureServer(modelPath(next.model), next.forceCpu, next.gpuDevice).catch((err) =>
         console.warn('whisper-server restart failed:', err)
       )
     }
@@ -205,6 +207,7 @@ export function registerIpc(
     backend: detectGpu(),
     binaryPath: whisperBinary()
   }))
+  handle('engine:listGpus', () => listGpus())
 
   // --- App version (shown in the UI corner + used by the --version CLI flag)
   handle('app:version', () => app.getVersion())
@@ -244,6 +247,7 @@ export function registerIpc(
       const raw = await transcribeWav(wav, modelPath(settings.model), {
         language: settings.language,
         forceCpu: settings.forceCpu,
+        gpuDevice: settings.gpuDevice,
         initialPrompt: buildInitialPrompt(settings.vocabulary)
       })
       const out = applyVocabulary(raw, settings.vocabulary)
@@ -274,11 +278,13 @@ export function registerIpc(
 
   // --- Microphone session ---------------------------------------------------
   handle('audio:start', async () => {
+    const settings = getSettings()
     // Paused before the renderer's mic capture begins (the caller awaits this
     // handler before calling recorder.start()), so whisper never picks up
     // bleed-through from whatever was playing in the background.
-    if (getSettings().pauseMediaOnRecord) await pauseMedia()
-    startRecording((text) => send('transcribe:partial', text))
+    if (settings.pauseMediaOnRecord) await pauseMedia()
+    const contextTerms = settings.useClipboardContext ? extractContextTerms(clipboard.readText()) : []
+    startRecording((text) => send('transcribe:partial', text), contextTerms)
     setStatus('recording')
   })
 

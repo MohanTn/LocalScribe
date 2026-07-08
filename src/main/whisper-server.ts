@@ -5,7 +5,7 @@ import { cpus } from 'os'
 import { delimiter, join } from 'path'
 import { app } from 'electron'
 import http from 'http'
-import { detectGpu, type TranscribeOptions, type WhisperOutput } from './whisper'
+import { detectGpu, gpuEnv, type TranscribeOptions, type WhisperOutput } from './whisper'
 import type { Segment, Word } from '../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -62,6 +62,7 @@ let serverProc: ChildProcess | null = null
 let serverPort: number | null = null
 let currentModel: string | null = null
 let currentForceCpu: boolean | null = null
+let currentGpuDevice: string | null = null
 let startPromise: Promise<void> | null = null
 
 export function isServerAvailable(): boolean {
@@ -104,18 +105,35 @@ function killServer(): void {
   serverPort = null
   currentModel = null
   currentForceCpu = null
+  currentGpuDevice = null
 }
 
-export async function ensureServer(modelPath: string, forceCpu: boolean): Promise<void> {
+export async function ensureServer(
+  modelPath: string,
+  forceCpu: boolean,
+  gpuDevice = ''
+): Promise<void> {
   // Already running with the right settings — no-op.
-  if (isServerAvailable() && currentModel === modelPath && currentForceCpu === forceCpu) {
+  if (
+    isServerAvailable() &&
+    currentModel === modelPath &&
+    currentForceCpu === forceCpu &&
+    currentGpuDevice === gpuDevice
+  ) {
     return
   }
 
   // If a start is already in-flight, wait for it; it might match after all.
   if (startPromise) {
     await startPromise
-    if (isServerAvailable() && currentModel === modelPath && currentForceCpu === forceCpu) return
+    if (
+      isServerAvailable() &&
+      currentModel === modelPath &&
+      currentForceCpu === forceCpu &&
+      currentGpuDevice === gpuDevice
+    ) {
+      return
+    }
   }
 
   // Stale: kill old server and start fresh.
@@ -151,7 +169,8 @@ export async function ensureServer(modelPath: string, forceCpu: boolean): Promis
 
     const proc = spawn(bin, args, {
       windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...gpuEnv(backend, useGpu ? gpuDevice : undefined) }
     })
 
     let stderr = ''
@@ -179,6 +198,7 @@ export async function ensureServer(modelPath: string, forceCpu: boolean): Promis
     serverPort = port
     currentModel = modelPath
     currentForceCpu = forceCpu
+    currentGpuDevice = gpuDevice
 
     // Clean up state on unexpected exit.
     proc.on('exit', () => {
@@ -187,6 +207,7 @@ export async function ensureServer(modelPath: string, forceCpu: boolean): Promis
         serverPort = null
         currentModel = null
         currentForceCpu = null
+        currentGpuDevice = null
       }
     })
 

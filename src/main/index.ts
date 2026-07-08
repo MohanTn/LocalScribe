@@ -208,7 +208,7 @@ if (!app.requestSingleInstanceLock()) {
     // Start whisper-server so the model stays resident — avoids the per-job
     // cold-start penalty (disk read + GPU alloc) on every partial/final transcription.
     const s = getSettings()
-    ensureServer(modelPath(s.model), s.forceCpu).catch((err) =>
+    ensureServer(modelPath(s.model), s.forceCpu, s.gpuDevice).catch((err) =>
       console.warn('whisper-server failed to start; falling back to whisper-cli:', err)
     )
 

@@ -83,10 +83,81 @@ export function detectGpu(): GpuBackend {
 export interface TranscribeOptions {
   language?: string
   forceCpu?: boolean
+  /** Device index (as reported by nvidia-smi/vulkaninfo) to restrict whisper.cpp to.
+   *  Empty/undefined = no restriction. */
+  gpuDevice?: string
   /** Biases decoding toward these terms (see vocabulary.ts's buildInitialPrompt). */
   initialPrompt?: string
   /** Bypass whisper-server and spawn the CLI directly (used for benchmarking). */
   forceCli?: boolean
+}
+
+export interface GpuInfo {
+  index: number
+  name: string
+}
+
+/**
+ * whisper.cpp's CLI has no --device flag; the only way to steer a specific job
+ * at a specific physical GPU is the backend's own "visible devices" env var
+ * (CUDA_VISIBLE_DEVICES / GGML_VK_VISIBLE_DEVICES), which the CUDA/Vulkan
+ * runtime reads before ggml ever sees a device list. Metal/CPU builds have no
+ * such env var and no multi-device concept here, so they're left untouched.
+ */
+export function gpuEnv(backend: GpuBackend, gpuDevice: string | undefined): NodeJS.ProcessEnv {
+  if (!gpuDevice) return {}
+  if (backend === 'cuda') return { CUDA_VISIBLE_DEVICES: gpuDevice }
+  if (backend === 'vulkan') return { GGML_VK_VISIBLE_DEVICES: gpuDevice }
+  return {}
+}
+
+/** Lines look like: "GPU 0: NVIDIA GeForce RTX 3060 (UUID: GPU-...)" */
+function listCudaGpus(): GpuInfo[] {
+  const res = spawnSync('nvidia-smi', ['-L'], { windowsHide: true, encoding: 'utf8' })
+  if (res.status !== 0 || !res.stdout) return []
+  const gpus: GpuInfo[] = []
+  for (const line of res.stdout.split('\n')) {
+    const m = line.match(/^GPU (\d+):(.*)$/)
+    if (!m) continue
+    const rest = m[2].trim()
+    const uuidIdx = rest.indexOf('(UUID')
+    const name = (uuidIdx >= 0 ? rest.slice(0, uuidIdx) : rest).trim()
+    if (name) gpus.push({ index: Number(m[1]), name })
+  }
+  return gpus
+}
+
+/**
+ * vulkaninfo --summary lists a "Devices:" block with entries like:
+ * "GPU0:\n\tapiVersion = ...\n\tdeviceName = NVIDIA GeForce RTX 3060"
+ */
+function listVulkanGpus(): GpuInfo[] {
+  const res = spawnSync('vulkaninfo', ['--summary'], { windowsHide: true, encoding: 'utf8' })
+  if (res.status !== 0 || !res.stdout) return []
+  const gpus: GpuInfo[] = []
+  const gpuBlocks = res.stdout.split(/\nGPU(\d+):/).slice(1)
+  for (let i = 0; i < gpuBlocks.length; i += 2) {
+    const index = Number(gpuBlocks[i])
+    const block = gpuBlocks[i + 1] ?? ''
+    const nameMatch = block.match(/deviceName\s*=\s*(.+)/)
+    if (nameMatch) gpus.push({ index, name: nameMatch[1].trim() })
+  }
+  return gpus
+}
+
+/**
+ * Lists physical GPUs for the Settings dropdown, using whichever tool matches
+ * the compiled-in backend: `nvidia-smi -L` for CUDA (NVIDIA devices only —
+ * a non-NVIDIA integrated GPU won't appear on a CUDA-only build, see
+ * detectGpu()'s doc comment), `vulkaninfo --summary` for Vulkan (vendor-
+ * neutral, sees integrated and dedicated GPUs alike). Returns [] for
+ * metal/cpu, where whisper.cpp has no multi-device selection at all.
+ */
+export function listGpus(): GpuInfo[] {
+  const backend = detectGpu()
+  if (backend === 'cuda') return listCudaGpus()
+  if (backend === 'vulkan') return listVulkanGpus()
+  return []
 }
 
 export interface WhisperOutput {
@@ -158,7 +229,10 @@ export async function transcribeWav(
   }
 
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn(bin, args, { windowsHide: true })
+    const proc = spawn(bin, args, {
+      windowsHide: true,
+      env: { ...process.env, ...gpuEnv(backend, useGpu ? opts.gpuDevice : undefined) }
+    })
     let stderr = ''
     proc.stderr.on('data', (d) => (stderr += d.toString()))
     proc.on('error', (err) => reject(new Error(`Could not start whisper.cpp: ${err.message}`)))
