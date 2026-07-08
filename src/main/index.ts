@@ -96,12 +96,12 @@ function createWindow(): void {
   // button (and the overlap) entirely, on every platform. Unlike 'close',
   // Electron's 'minimize' event isn't cancelable (its listener takes no
   // event argument at all), so there's no preventDefault() to reach for —
-  // the window briefly minimizes, then this immediately restores it and
-  // switches to the mini widget instead.
-  mainWindow.on('minimize', () => {
-    mainWindow?.restore()
-    enterMiniMode()
-  })
+  // the window briefly minimizes, then enterMiniMode() restores it and
+  // switches to the mini widget. The restore/hide sequencing lives inside
+  // enterMiniMode() (see hideMainAfterRestore): hiding the window in this
+  // handler's tick, while the WM's minimize is still in flight, is what left
+  // it hidden-while-iconified and unrecoverable on Wayland.
+  mainWindow.on('minimize', () => enterMiniMode())
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url) // external links go to the OS browser
@@ -178,7 +178,29 @@ function enterMiniMode(): void {
   const { x, y } = miniPosition()
   miniWindow.setPosition(x, y)
   miniWindow.show()
-  mainWindow?.hide()
+  hideMainAfterRestore()
+}
+
+// Hiding a still-minimized window on Linux/Wayland leaves it un-restorable
+// (a later show() re-maps it still iconified). So restore() first and hide()
+// only once the un-minimize has actually landed, not in the same tick. The
+// timeout is a fallback so mini mode still engages on WMs that never emit
+// 'restore'; showWindow()'s isMinimized() guard remains the second line of
+// defense for that case.
+function hideMainAfterRestore(): void {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return
+  if (!win.isMinimized()) {
+    win.hide()
+    return
+  }
+  const hide = (): void => {
+    clearTimeout(timer)
+    if (!win.isDestroyed()) win.hide()
+  }
+  win.once('restore', hide)
+  const timer = setTimeout(hide, 400)
+  win.restore()
 }
 
 function exitMiniMode(): void {
