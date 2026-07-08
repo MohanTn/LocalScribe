@@ -78,8 +78,16 @@ export interface Settings {
   micDeviceId: string
   /** Force CPU even when a GPU is available. */
   forceCpu: boolean
+  /** Index of the GPU device to use (as reported by nvidia-smi/vulkaninfo),
+   *  e.g. "0" or "1". Empty string = no restriction (whisper.cpp's default
+   *  device). Ignored when forceCpu is set or the backend is metal/cpu. */
+  gpuDevice: string
   /** Pause background media (YouTube, Spotify, etc.) while recording, resuming on stop. */
   pauseMediaOnRecord: boolean
+  /** Read the clipboard once at the start of each recording and bias whisper
+   *  toward code-like identifiers found in it (see src/main/clipboardContext.ts).
+   *  Off by default — passive clipboard reads can surface sensitive text. */
+  useClipboardContext: boolean
   /** Silently check for a new release on startup (see src/main/updater.ts). */
   autoUpdateCheck: boolean
   llm: LlmSettings

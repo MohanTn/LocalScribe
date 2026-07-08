@@ -87,11 +87,13 @@ export default function SettingsView(): React.JSX.Element {
   const setBenchmarkResults = useStore((s) => s.setBenchmarkResults)
   const [mics, setMics] = useState<Array<{ id: string; label: string }>>([])
   const [engine, setEngine] = useState<{ backend: string; binaryPath: string | null } | null>(null)
+  const [gpus, setGpus] = useState<Array<{ index: number; name: string }>>([])
   const [checkingUpdate, setCheckingUpdate] = useState(false)
 
   useEffect(() => {
     void listMicrophones().then(setMics).catch(() => setMics([]))
     void window.api.engineInfo().then(setEngine)
+    void window.api.listGpus().then(setGpus).catch(() => setGpus([]))
   }, [])
 
   const update = useCallback(
@@ -384,6 +386,40 @@ export default function SettingsView(): React.JSX.Element {
           />
           Force CPU (disable GPU acceleration)
         </label>
+        {engine && (engine.backend === 'cuda' || engine.backend === 'vulkan') && (
+          <div className="field">
+            <label>GPU device</label>
+            {gpus.length > 0 ? (
+              <select
+                value={settings.gpuDevice}
+                disabled={settings.forceCpu}
+                onChange={(e) => void update({ gpuDevice: e.target.value })}
+              >
+                <option value="">System default</option>
+                {gpus.map((g) => (
+                  <option key={g.index} value={String(g.index)}>
+                    GPU {g.index}: {g.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="number"
+                min={0}
+                placeholder="Device index (leave blank for default)"
+                value={settings.gpuDevice}
+                disabled={settings.forceCpu}
+                onChange={(e) => void update({ gpuDevice: e.target.value })}
+              />
+            )}
+            <span className="muted">
+              Picks which physical GPU whisper.cpp runs on, useful if you have both an
+              integrated and a dedicated GPU. On a {engine.backend.toUpperCase()} build this only
+              sees {engine.backend === 'cuda' ? 'NVIDIA' : 'Vulkan-capable'} devices — a build
+              compiled for a different backend may not see all of your GPUs.
+            </span>
+          </div>
+        )}
         <label className="field checkbox">
           <input
             type="checkbox"
@@ -399,6 +435,20 @@ export default function SettingsView(): React.JSX.Element {
           any one app, but muted playback keeps advancing in the background, so it&apos;ll have
           skipped ahead by however long you recorded once unmuted. On Windows this sends the same
           mute key a hardware button would rather than a precise on/off.
+        </span>
+        <label className="field checkbox">
+          <input
+            type="checkbox"
+            checked={settings.useClipboardContext}
+            onChange={(e) => void update({ useClipboardContext: e.target.checked })}
+          />
+          Use clipboard as context for transcription
+        </label>
+        <span className="muted">
+          Reads your clipboard once at the start of each recording and looks for code-like
+          identifiers (camelCase, snake_case, etc.) to help whisper spell them correctly —
+          useful when dictating about code you just copied. Off by default since this is a
+          passive clipboard read and clipboard contents can be sensitive.
         </span>
       </section>
 

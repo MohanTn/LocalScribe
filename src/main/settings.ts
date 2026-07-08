@@ -14,7 +14,9 @@ export const defaultSettings: Settings = {
   hotkeyPtt: '',
   micDeviceId: '',
   forceCpu: false,
+  gpuDevice: '',
   pauseMediaOnRecord: true,
+  useClipboardContext: false,
   autoUpdateCheck: true,
   llm: {
     provider: 'none',

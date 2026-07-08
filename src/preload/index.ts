@@ -62,6 +62,7 @@ const api: LocalScribeApi = {
   paste: (text) => invoke('paste:text', text),
   copyText: (text) => invoke('clipboard:copy', text),
   engineInfo: () => invoke('engine:info'),
+  listGpus: () => invoke('engine:listGpus'),
   appVersion: () => invoke('app:version'),
   getStatus: () => invoke('status:get'),
   getLastTranscript: () => invoke('transcribe:getLast'),

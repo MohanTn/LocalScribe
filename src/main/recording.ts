@@ -5,6 +5,7 @@ import { getSettings } from './settings'
 import { modelPath } from './models'
 import { transcribeWav } from './whisper'
 import { applyVocabulary, buildInitialPrompt } from './vocabulary'
+import { detectSpeech } from './vad'
 import type { TranscriptionResult } from '../shared/types'
 
 // The renderer captures the microphone (getUserMedia needs a renderer) and
@@ -33,16 +34,22 @@ let partialTimer: NodeJS.Timeout | null = null
 // two whisper jobs overlapping on a small GPU run ~1.8x slower each.
 let partialInFlight: Promise<void> | null = null
 let startedAt = 0
+// Snapshot of clipboard-derived terms for the current session, captured once
+// at startRecording() and reused by every partial + the final pass — an
+// intentional snapshot, not a live settings read, so a mid-recording toggle
+// of settings.useClipboardContext never changes an in-flight session.
+let sessionContextTerms: string[] = []
 
 export function isRecording(): boolean {
   return recording
 }
 
-export function startRecording(onPartial: (text: string) => void): void {
+export function startRecording(onPartial: (text: string) => void, contextTerms: string[] = []): void {
   if (recording) return
   chunks = []
   recording = true
   startedAt = Date.now()
+  sessionContextTerms = contextTerms
   partialTimer = setInterval(() => {
     // Skip a tick rather than queueing whisper runs when the previous partial
     // is still in flight — on a small GPU, overlapping jobs contend for VRAM.
@@ -95,6 +102,7 @@ export function abortRecording(): void {
   // now false. Clear the handle so the next session starts clean.
   partialInFlight = null
   chunks = []
+  sessionContextTerms = []
 }
 
 /**
@@ -121,7 +129,10 @@ async function emitPartial(onPartial: (text: string) => void): Promise<void> {
   if (tail.length < BYTES_PER_SECOND) return // wait for ≥1s of audio
   try {
     const window = tail.length > windowBytes ? tail.subarray(tail.length - windowBytes) : tail
-    const out = await runWhisperOnPcm(window)
+    const vad = detectSpeech(window, SAMPLE_RATE)
+    if (!vad.hasSpeech) return // pure silence this tick — skip the whisper call entirely
+    const trimmed = vad.speechStartByte > 0 ? window.subarray(vad.speechStartByte) : window
+    const out = await runWhisperOnPcm(trimmed)
     if (recording) onPartial(out.text)
   } catch {
     // Partials are best-effort; the final pass will surface real errors.
@@ -134,12 +145,14 @@ async function runWhisperOnPcm(pcm: Buffer): Promise<{ text: string; segments: T
   const wav = join(dir, 'mic.wav')
   try {
     writeFileSync(wav, pcmToWav(pcm))
+    const terms = [...settings.vocabulary, ...sessionContextTerms]
     const out = await transcribeWav(wav, modelPath(settings.model), {
       language: settings.language,
       forceCpu: settings.forceCpu,
-      initialPrompt: buildInitialPrompt(settings.vocabulary)
+      gpuDevice: settings.gpuDevice,
+      initialPrompt: buildInitialPrompt(terms)
     })
-    return applyVocabulary(out, settings.vocabulary)
+    return applyVocabulary(out, terms)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

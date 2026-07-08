@@ -64,6 +64,9 @@ export interface LocalScribeApi {
   /** Writes to the OS clipboard via Electron's clipboard module (main process). */
   copyText: (text: string) => Promise<void>
   engineInfo: () => Promise<{ backend: 'metal' | 'cuda' | 'vulkan' | 'cpu'; binaryPath: string | null }>
+  /** Physical GPUs available for the compiled-in backend (empty for metal/cpu,
+   *  since whisper.cpp has no multi-device selection there). */
+  listGpus: () => Promise<{ index: number; name: string }[]>
   appVersion: () => Promise<string>
   /** Current app status — pulled on mount since a surface that mounts after
    *  the fact (mini widget) would otherwise miss the 'status' push. */
